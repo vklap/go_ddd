@@ -21,19 +21,19 @@ type MessageType interface {
 	Event
 }
 
-type Auth struct {
-	UserID    Identifier
-	SuperUser bool
+type Auth interface {
+	UserID() Identifier
+	IsSuperUser() bool
 }
 
-type Entity struct {
-	ID     Identifier
-	Events []Event
+type Entity interface {
+	ID() Identifier
+	Events() []Event
 }
 
-type Permission struct {
-	Action string
-	ID     Identifier
+type Permission interface {
+	Action() string
+	ID() Identifier
 }
 
 type BoundedContextError struct {

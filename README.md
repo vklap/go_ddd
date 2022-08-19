@@ -1,2 +1,2 @@
 # go-ddd
-DDD Framework for go programming language
+DDD Framework for the go programming language

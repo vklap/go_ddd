@@ -1,0 +1,1 @@
+PGPASSWORD=IWillLoveGo4Ever! psql -h localhost -p 5432 -U go_admin master < create_tables.sql

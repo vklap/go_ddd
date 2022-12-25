@@ -1,29 +1,25 @@
 package domain
 
-type EventType string
-type CommandType string
-type StatusCode string
-
 type Error struct {
 	message    string
-	statusCode StatusCode
+	statusCode string
 }
 
 func (e *Error) Error() string {
 	return e.message
 }
 
-func (e *Error) StatusCode() StatusCode {
+func (e *Error) StatusCode() string {
 	return e.statusCode
 }
 
 type Command interface {
-	Type() CommandType
-	IsValid() (error, bool)
+	CommandName() string
+	IsValid() error
 }
 
 type Event interface {
-	Type() EventType
+	EventName() string
 }
 
 type Entity interface {

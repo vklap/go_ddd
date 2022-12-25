@@ -5,10 +5,12 @@ import (
 	"github.com/vklap.go-ddd/pkg/domain"
 )
 
-type Repository[Entity domain.Entity] interface {
-	Find(ctx context.Context, id string) (Entity, error)
-	Save(ctx context.Context, entity Entity) error
+type CommitterRollbacker interface {
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
-	SavedEntities() []Entity
+	SavedEntities() []domain.Entity
+}
+
+type Repository interface {
+	CommitterRollbacker
 }

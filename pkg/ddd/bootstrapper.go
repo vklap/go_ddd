@@ -10,7 +10,7 @@ type Bootstrapper struct {
 	eventHandlersFactory  *internal.EventHandlersFactory
 }
 
-func New() *Bootstrapper {
+func NewBootstrapper() *Bootstrapper {
 	return &Bootstrapper{
 		commandHandlerFactory: &internal.CommandHandlerFactory{},
 		eventHandlersFactory:  &internal.EventHandlersFactory{},

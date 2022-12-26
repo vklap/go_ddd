@@ -22,7 +22,7 @@ func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command ddd.Com
 	if err = command.IsValid(); err != nil {
 		return result, err
 	}
-	result, err = uow.handler.handle(ctx, command)
+	result, err = uow.handler.Handle(ctx, command)
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {
@@ -50,7 +50,7 @@ func (uow *EventUnitOfWork) Events() []ddd.Event {
 }
 
 func (uow *EventUnitOfWork) HandleEvent(ctx context.Context, event ddd.Event) (err error) {
-	err = uow.handler.handle(ctx, event)
+	err = uow.handler.Handle(ctx, event)
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {

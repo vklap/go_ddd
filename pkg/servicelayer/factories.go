@@ -1,4 +1,4 @@
-package service_layer
+package servicelayer
 
 import (
 	"fmt"

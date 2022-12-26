@@ -1,4 +1,4 @@
-package service_layer
+package servicelayer
 
 import (
 	"context"
@@ -7,9 +7,16 @@ import (
 )
 
 type MessageBus struct {
-	commandHandlerFactory CommandHandlerFactory
-	eventHandlersFactory  EventHandlersFactory
+	commandHandlerFactory *CommandHandlerFactory
+	eventHandlersFactory  *EventHandlersFactory
 	events                []domain.Event
+}
+
+func NewMessageBus(commandHandlerFactory *CommandHandlerFactory, eventHandlersFactory *EventHandlersFactory) *MessageBus {
+	return &MessageBus{
+		commandHandlerFactory: commandHandlerFactory,
+		eventHandlersFactory:  eventHandlersFactory,
+	}
 }
 
 func (m *MessageBus) Handle(ctx context.Context, command domain.Command) (any, error) {

@@ -1,15 +1,15 @@
-package servicelayer
+package internal
 
 import (
 	"context"
-	"github.com/vklap.go-ddd/pkg/domain"
+	"github.com/vklap.go-ddd/pkg/ddd"
 	"log"
 )
 
 type MessageBus struct {
 	commandHandlerFactory *CommandHandlerFactory
 	eventHandlersFactory  *EventHandlersFactory
-	events                []domain.Event
+	events                []ddd.Event
 }
 
 func NewMessageBus(commandHandlerFactory *CommandHandlerFactory, eventHandlersFactory *EventHandlersFactory) *MessageBus {
@@ -19,7 +19,7 @@ func NewMessageBus(commandHandlerFactory *CommandHandlerFactory, eventHandlersFa
 	}
 }
 
-func (m *MessageBus) Handle(ctx context.Context, command domain.Command) (any, error) {
+func (m *MessageBus) Handle(ctx context.Context, command ddd.Command) (any, error) {
 	handler, err := m.commandHandlerFactory.CreateHandler(command)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (m *MessageBus) Handle(ctx context.Context, command domain.Command) (any, e
 
 func (m *MessageBus) handleEvents(ctx context.Context) {
 	for len(m.events) > 0 {
-		var event domain.Event
+		var event ddd.Event
 		event, m.events = m.events[0], m.events[1:]
 		handlers, err := m.eventHandlersFactory.CreateHandlers(event)
 		if err != nil {

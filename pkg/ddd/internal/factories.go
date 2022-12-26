@@ -1,27 +1,24 @@
-package servicelayer
+package internal
 
 import (
 	"fmt"
-	"github.com/vklap.go-ddd/pkg/domain"
+	"github.com/vklap.go-ddd/pkg/ddd"
 	"sync"
 )
 
-type CreateCommandHandler func() (CommandHandler, error)
-type CreateEventHandler func() (EventHandler, error)
-
 type CommandHandlerFactory struct {
 	mu               sync.Mutex
-	handlerFactories map[string]CreateCommandHandler
+	handlerFactories map[string]ddd.CreateCommandHandler
 }
 
-func (f *CommandHandlerFactory) Register(command domain.Command, factory CreateCommandHandler) {
+func (f *CommandHandlerFactory) Register(command ddd.Command, factory ddd.CreateCommandHandler) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.handlerFactories[command.CommandName()] = factory
 }
 
-func (f *CommandHandlerFactory) CreateHandler(command domain.Command) (CommandHandler, error) {
+func (f *CommandHandlerFactory) CreateHandler(command ddd.Command) (ddd.CommandHandler, error) {
 	factory, ok := f.handlerFactories[command.CommandName()]
 	if ok == false {
 		panic(fmt.Sprintf("command is not registered in executor: %q", command.CommandName()))
@@ -35,19 +32,19 @@ func (f *CommandHandlerFactory) CreateHandler(command domain.Command) (CommandHa
 
 type EventHandlersFactory struct {
 	mu               sync.Mutex
-	handlerFactories map[string][]CreateEventHandler
+	handlerFactories map[string][]ddd.CreateEventHandler
 }
 
-func (f *EventHandlersFactory) Register(event domain.Event, factory CreateEventHandler) {
+func (f *EventHandlersFactory) Register(event ddd.Event, factory ddd.CreateEventHandler) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.handlerFactories[event.EventName()] = append(f.handlerFactories[event.EventName()], factory)
 }
 
-func (f *EventHandlersFactory) CreateHandlers(event domain.Event) ([]EventHandler, error) {
+func (f *EventHandlersFactory) CreateHandlers(event ddd.Event) ([]ddd.EventHandler, error) {
 	factories := f.handlerFactories[event.EventName()]
-	handlers := make([]EventHandler, len(factories))
+	handlers := make([]ddd.EventHandler, len(factories))
 	for _, factory := range factories {
 		handler, err := factory()
 		if err != nil {

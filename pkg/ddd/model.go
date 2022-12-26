@@ -1,17 +1,4 @@
-package domain
-
-type Error struct {
-	message    string
-	statusCode string
-}
-
-func (e *Error) Error() string {
-	return e.message
-}
-
-func (e *Error) StatusCode() string {
-	return e.statusCode
-}
+package ddd
 
 type Command interface {
 	CommandName() string
@@ -43,6 +30,10 @@ func (e *BaseEntity) SetID(id string) {
 
 func (e *BaseEntity) Events() []Event {
 	return e.events
+}
+
+func (e *BaseEntity) AddEvent(event Event) {
+	e.events = append(e.events, event)
 }
 
 var _ Entity = (*BaseEntity)(nil)

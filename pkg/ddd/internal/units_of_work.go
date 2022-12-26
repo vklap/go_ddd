@@ -1,25 +1,24 @@
-package servicelayer
+package internal
 
 import (
 	"context"
+	"github.com/vklap.go-ddd/pkg/ddd"
 	"log"
-
-	"github.com/vklap.go-ddd/pkg/domain"
 )
 
 type CommandUnitOfWork struct {
-	handler CommandHandler
+	handler ddd.CommandHandler
 }
 
-func (uow *CommandUnitOfWork) Events() []domain.Event {
-	result := make([]domain.Event, 0)
+func (uow *CommandUnitOfWork) Events() []ddd.Event {
+	result := make([]ddd.Event, 0)
 	for _, entity := range uow.handler.SavedEntities() {
 		result = append(result, entity.Events()...)
 	}
 	return result
 }
 
-func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command domain.Command) (result any, err error) {
+func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command ddd.Command) (result any, err error) {
 	if err = command.IsValid(); err != nil {
 		return result, err
 	}
@@ -39,18 +38,18 @@ func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command domain.
 }
 
 type EventUnitOfWork struct {
-	handler EventHandler
+	handler ddd.EventHandler
 }
 
-func (uow *EventUnitOfWork) Events() []domain.Event {
-	result := make([]domain.Event, 0)
+func (uow *EventUnitOfWork) Events() []ddd.Event {
+	result := make([]ddd.Event, 0)
 	for _, entity := range uow.handler.SavedEntities() {
 		result = append(result, entity.Events()...)
 	}
 	return result
 }
 
-func (uow *EventUnitOfWork) HandleEvent(ctx context.Context, event domain.Event) (err error) {
+func (uow *EventUnitOfWork) HandleEvent(ctx context.Context, event ddd.Event) (err error) {
 	err = uow.handler.handle(ctx, event)
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)

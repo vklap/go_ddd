@@ -1,24 +1,23 @@
-package internal
+package ddd
 
 import (
 	"context"
-	"github.com/vklap.go-ddd/pkg/ddd"
 	"log"
 )
 
-type CommandUnitOfWork struct {
-	handler ddd.CommandHandler
+type commandUnitOfWork struct {
+	handler CommandHandler
 }
 
-func (uow *CommandUnitOfWork) Events() []ddd.Event {
-	result := make([]ddd.Event, 0)
+func (uow *commandUnitOfWork) Events() []Event {
+	result := make([]Event, 0)
 	for _, entity := range uow.handler.SavedEntities() {
 		result = append(result, entity.Events()...)
 	}
 	return result
 }
 
-func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command ddd.Command) (result any, err error) {
+func (uow *commandUnitOfWork) HandleCommand(ctx context.Context, command Command) (result any, err error) {
 	if err = command.IsValid(); err != nil {
 		return result, err
 	}
@@ -26,7 +25,7 @@ func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command ddd.Com
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {
-			log.Printf("failed to rollback CommandUnitOfWork: %v", rollbackErr)
+			log.Printf("failed to rollback commandUnitOfWork: %v", rollbackErr)
 		}
 		return result, err
 	}
@@ -37,24 +36,24 @@ func (uow *CommandUnitOfWork) HandleCommand(ctx context.Context, command ddd.Com
 	return result, nil
 }
 
-type EventUnitOfWork struct {
-	handler ddd.EventHandler
+type eventUnitOfWork struct {
+	handler EventHandler
 }
 
-func (uow *EventUnitOfWork) Events() []ddd.Event {
-	result := make([]ddd.Event, 0)
+func (uow *eventUnitOfWork) Events() []Event {
+	result := make([]Event, 0)
 	for _, entity := range uow.handler.SavedEntities() {
 		result = append(result, entity.Events()...)
 	}
 	return result
 }
 
-func (uow *EventUnitOfWork) HandleEvent(ctx context.Context, event ddd.Event) (err error) {
+func (uow *eventUnitOfWork) HandleEvent(ctx context.Context, event Event) (err error) {
 	err = uow.handler.Handle(ctx, event)
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {
-			log.Printf("failed to rollback EventUnitOfWork: %v", rollbackErr)
+			log.Printf("failed to rollback eventUnitOfWork: %v", rollbackErr)
 		}
 		return err
 	}

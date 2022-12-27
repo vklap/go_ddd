@@ -2,18 +2,17 @@ package ddd
 
 import (
 	"context"
-	"github.com/vklap.go-ddd/pkg/ddd/internal"
 )
 
 type Bootstrapper struct {
-	commandHandlerFactory *internal.CommandHandlerFactory
-	eventHandlersFactory  *internal.EventHandlersFactory
+	commandHandlerFactory *commandHandlerFactory
+	eventHandlersFactory  *eventHandlersFactory
 }
 
 func NewBootstrapper() *Bootstrapper {
 	return &Bootstrapper{
-		commandHandlerFactory: &internal.CommandHandlerFactory{},
-		eventHandlersFactory:  &internal.EventHandlersFactory{},
+		commandHandlerFactory: newCommandHandlerFactory(),
+		eventHandlersFactory:  newEventHandlersFactory(),
 	}
 }
 
@@ -26,7 +25,7 @@ func (b *Bootstrapper) RegisterEventHandlerFactory(event Event, factory CreateEv
 }
 
 func (b *Bootstrapper) HandleCommand(ctx context.Context, command Command) (any, error) {
-	mb := internal.NewMessageBus(b.commandHandlerFactory, b.eventHandlersFactory)
+	mb := newMessageBus(b.commandHandlerFactory, b.eventHandlersFactory)
 	result, err := mb.Handle(ctx, command)
 	return result, err
 }

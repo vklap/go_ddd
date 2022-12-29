@@ -2,7 +2,6 @@ package ddd
 
 import (
 	"context"
-	"log"
 )
 
 type messageBus struct {
@@ -18,7 +17,7 @@ func newMessageBus(commandHandlerFactory *commandHandlerFactory, eventHandlersFa
 	}
 }
 
-func (m *messageBus) Handle(ctx context.Context, command Command) (any, error) {
+func (m *messageBus) Publish(ctx context.Context, command Command) (any, error) {
 	handler, err := m.commandHandlerFactory.CreateHandler(command)
 	if err != nil {
 		return nil, err
@@ -30,32 +29,31 @@ func (m *messageBus) Handle(ctx context.Context, command Command) (any, error) {
 		return nil, err
 	}
 
-	for _, entity := range handler.SavedEntities() {
-		m.events = append(m.events, entity.Events()...)
-	}
+	m.events = append(m.events, uow.Events()...)
 
-	m.handleEvents(ctx)
+	if err = m.handleEvents(ctx); err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
 
-func (m *messageBus) handleEvents(ctx context.Context) {
+func (m *messageBus) handleEvents(ctx context.Context) error {
 	for len(m.events) > 0 {
 		var event Event
 		event, m.events = m.events[0], m.events[1:]
 		handlers, err := m.eventHandlersFactory.CreateHandlers(event)
 		if err != nil {
-			log.Printf("failed to create event handler for %q: %v", event.EventName(), err)
+			return err
 		}
 		for _, handler := range handlers {
 			uow := eventUnitOfWork{handler}
 			err = uow.HandleEvent(ctx, event)
 			if err != nil {
-				log.Printf("failed to handle event %q: %v", event.EventName(), err)
+				return err
 			}
-			for _, entity := range handler.SavedEntities() {
-				m.events = append(m.events, entity.Events()...)
-			}
+			m.events = append(m.events, uow.Events()...)
 		}
 	}
+	return nil
 }

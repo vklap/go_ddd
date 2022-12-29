@@ -26,6 +26,6 @@ func (b *Bootstrapper) RegisterEventHandlerFactory(event Event, factory CreateEv
 
 func (b *Bootstrapper) HandleCommand(ctx context.Context, command Command) (any, error) {
 	mb := newMessageBus(b.commandHandlerFactory, b.eventHandlersFactory)
-	result, err := mb.Handle(ctx, command)
+	result, err := mb.Publish(ctx, command)
 	return result, err
 }

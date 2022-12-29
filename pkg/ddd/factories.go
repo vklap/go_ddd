@@ -52,7 +52,7 @@ func (f *eventHandlersFactory) Register(event Event, factory CreateEventHandler)
 
 func (f *eventHandlersFactory) CreateHandlers(event Event) ([]EventHandler, error) {
 	factories := f.handlerFactories[event.EventName()]
-	handlers := make([]EventHandler, len(factories))
+	handlers := make([]EventHandler, 0)
 	for _, factory := range factories {
 		handler, err := factory()
 		if err != nil {

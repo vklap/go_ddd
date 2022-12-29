@@ -9,14 +9,6 @@ type commandUnitOfWork struct {
 	handler CommandHandler
 }
 
-func (uow *commandUnitOfWork) Events() []Event {
-	result := make([]Event, 0)
-	for _, entity := range uow.handler.SavedEntities() {
-		result = append(result, entity.Events()...)
-	}
-	return result
-}
-
 func (uow *commandUnitOfWork) HandleCommand(ctx context.Context, command Command) (result any, err error) {
 	if err = command.IsValid(); err != nil {
 		return result, err
@@ -38,14 +30,6 @@ func (uow *commandUnitOfWork) HandleCommand(ctx context.Context, command Command
 
 type eventUnitOfWork struct {
 	handler EventHandler
-}
-
-func (uow *eventUnitOfWork) Events() []Event {
-	result := make([]Event, 0)
-	for _, entity := range uow.handler.SavedEntities() {
-		result = append(result, entity.Events()...)
-	}
-	return result
 }
 
 func (uow *eventUnitOfWork) HandleEvent(ctx context.Context, event Event) (err error) {

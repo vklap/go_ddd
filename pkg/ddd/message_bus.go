@@ -18,6 +18,9 @@ func newMessageBus(commandHandlerFactory *commandHandlerFactory, eventHandlersFa
 }
 
 func (m *messageBus) Publish(ctx context.Context, command Command) (any, error) {
+	if err := command.IsValid(); err != nil {
+		return nil, err
+	}
 	handler, err := m.commandHandlerFactory.CreateHandler(command)
 	if err != nil {
 		return nil, err
@@ -29,7 +32,7 @@ func (m *messageBus) Publish(ctx context.Context, command Command) (any, error) 
 		return nil, err
 	}
 
-	m.events = append(m.events, uow.Events()...)
+	m.events = append(m.events, handler.Events()...)
 
 	if err = m.handleEvents(ctx); err != nil {
 		return nil, err
@@ -52,7 +55,7 @@ func (m *messageBus) handleEvents(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			m.events = append(m.events, uow.Events()...)
+			m.events = append(m.events, handler.Events()...)
 		}
 	}
 	return nil

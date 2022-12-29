@@ -4,29 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/vklap.go-ddd/pkg/ddd"
+	"github.com/vklap/go_ddd/internal/domain/command_model"
+	"github.com/vklap/go_ddd/internal/service_layer/command_handlers"
+	"github.com/vklap/go_ddd/pkg/ddd"
 	"strings"
 	"testing"
 )
-
-type changeEmailCommand struct {
-	UserID string
-	Email  string
-}
-
-func (c *changeEmailCommand) IsValid() error {
-	if c.UserID == "" {
-		return ddd.NewError("userID cannot be empty", ddd.StatusCodeBadRequest)
-	}
-	if c.Email == "" {
-		return ddd.NewError("email cannot be empty", ddd.StatusCodeBadRequest)
-	}
-	return nil
-}
-
-func (c *changeEmailCommand) CommandName() string {
-	return "changeEmailCommand"
-}
 
 type notSupportedCommand struct{}
 
@@ -36,15 +19,6 @@ func (c *notSupportedCommand) IsValid() error {
 
 func (c *notSupportedCommand) CommandName() string {
 	return "notSupportedCommand"
-}
-
-type emailChangedEvent struct {
-	OriginalEmail string
-	NewEmail      string
-}
-
-func (e *emailChangedEvent) EventName() string {
-	return "emailChangedEvent"
 }
 
 // Triggered by emailChangedEventHandler
@@ -60,47 +34,22 @@ func (e *eventWithoutHandler) EventName() string {
 	return "eventWithoutHandler"
 }
 
-type user struct {
-	ddd.BaseEntity
-	email string
-}
-
-func (u *user) Email() string {
-	return u.email
-}
-
-func (u *user) SetEmail(value string) {
-	if u.email != "" {
-		u.AddEvent(&emailChangedEvent{NewEmail: value, OriginalEmail: u.email})
-	}
-	u.email = value
-}
-
-type repository interface {
-	GetUserById(ctx context.Context, id string) (*user, error)
-	SaveUser(ctx context.Context, user *user) error
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
-	SavedEntities() []ddd.Entity
-}
-
 type stubRepository struct {
-	user           *user
+	user           *command_model.User
 	entities       []ddd.Entity
 	commitCalled   bool
 	rollbackCalled bool
-	getUserById    func(ctx context.Context, id string) (*user, error)
-	saveUser       func(ctx context.Context, user *user) error
+	getUserById    func(ctx context.Context, id string) (*command_model.User, error)
+	saveUser       func(ctx context.Context, user *command_model.User) error
 	commit         func(ctx context.Context) error
 	rollback       func(ctx context.Context) error
-	savedEntities  func() []ddd.Entity
 }
 
-func (r *stubRepository) GetUserById(ctx context.Context, id string) (*user, error) {
+func (r *stubRepository) GetUserById(ctx context.Context, id string) (*command_model.User, error) {
 	return r.getUserById(ctx, id)
 }
 
-func (r *stubRepository) SaveUser(ctx context.Context, user *user) error {
+func (r *stubRepository) SaveUser(ctx context.Context, user *command_model.User) error {
 	return r.saveUser(ctx, user)
 }
 func (r *stubRepository) Commit(ctx context.Context) error {
@@ -109,51 +58,10 @@ func (r *stubRepository) Commit(ctx context.Context) error {
 func (r *stubRepository) Rollback(ctx context.Context) error {
 	return r.rollback(ctx)
 }
-func (r *stubRepository) SavedEntities() []ddd.Entity {
-	return r.savedEntities()
-}
-
-type changeEmailCommandHandler struct {
-	r             repository
-	savedEntities []ddd.Entity
-}
-
-func (h *changeEmailCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
-	if err := command.IsValid(); err != nil {
-		return nil, err
-	}
-	changeEmailCommand, ok := command.(*changeEmailCommand)
-	if ok == false {
-		return nil, fmt.Errorf("changeEmailCommandHandler expects a command of type %T", changeEmailCommand)
-	}
-
-	user, err := h.r.GetUserById(ctx, changeEmailCommand.UserID)
-	if err != nil {
-		return nil, err
-	}
-	user.SetEmail(changeEmailCommand.Email)
-	if err = h.r.SaveUser(ctx, user); err != nil {
-		return nil, err
-	}
-	h.savedEntities = append(h.savedEntities, user)
-	return nil, nil
-}
-
-func (h *changeEmailCommandHandler) Commit(ctx context.Context) error {
-	return h.r.Commit(ctx)
-}
-
-func (h *changeEmailCommandHandler) Rollback(ctx context.Context) error {
-	return h.r.Rollback(ctx)
-}
-
-func (h *changeEmailCommandHandler) SavedEntities() []ddd.Entity {
-	return h.savedEntities
-}
 
 type fakeBootstrapper struct {
 	b                              *ddd.Bootstrapper
-	ChangeEmailCommandHandler      *changeEmailCommandHandler
+	ChangeEmailCommandHandler      *command_handlers.ChangeEmailCommandHandler
 	EmailChangedEventHandler       *stubEventHandler
 	MossadEmailCreatedEventHandler *stubEventHandler
 	Repository                     *stubRepository
@@ -165,10 +73,10 @@ type stubEventHandler struct {
 	rollbackCalled bool
 	entities       []ddd.Entity
 
-	handle        func(ctx context.Context, event ddd.Event) error
-	commit        func(ctx context.Context) error
-	rollback      func(ctx context.Context) error
-	savedEntities func() []ddd.Entity
+	handle   func(ctx context.Context, event ddd.Event) error
+	commit   func(ctx context.Context) error
+	rollback func(ctx context.Context) error
+	events   func() []ddd.Event
 }
 
 func (h *stubEventHandler) Handle(ctx context.Context, event ddd.Event) error {
@@ -183,8 +91,8 @@ func (h *stubEventHandler) Rollback(ctx context.Context) error {
 	return h.rollback(ctx)
 }
 
-func (h *stubEventHandler) SavedEntities() []ddd.Entity {
-	return h.savedEntities()
+func (h *stubEventHandler) Events() []ddd.Event {
+	return h.events()
 }
 
 func newFakeBootstrapper() *fakeBootstrapper {
@@ -193,14 +101,14 @@ func newFakeBootstrapper() *fakeBootstrapper {
 	fb := &fakeBootstrapper{
 		b:                              ddd.NewBootstrapper(),
 		Repository:                     repo,
-		ChangeEmailCommandHandler:      &changeEmailCommandHandler{r: repo},
+		ChangeEmailCommandHandler:      command_handlers.NewChangeEmailCommandHandler(repo),
 		EmailChangedEventHandler:       &stubEventHandler{},
 		MossadEmailCreatedEventHandler: &stubEventHandler{},
 	}
-	fb.b.RegisterCommandHandlerFactory(&changeEmailCommand{}, func() (ddd.CommandHandler, error) {
+	fb.b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
 		return fb.ChangeEmailCommandHandler, nil
 	})
-	fb.b.RegisterEventHandlerFactory(&emailChangedEvent{}, func() (ddd.EventHandler, error) {
+	fb.b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
 		return fb.EmailChangedEventHandler, nil
 	})
 	fb.b.RegisterEventHandlerFactory(&mossadEmailCreatedEvent{}, func() (ddd.EventHandler, error) {
@@ -213,28 +121,29 @@ func TestChangeEmail(t *testing.T) {
 	const userID = "1"
 	const originalEmail = "kamel.amit@thaabet.sy"
 	const newEmail = "eli.cohen@mossad.gov.il"
-	aUser := &user{email: originalEmail}
+	aUser := &command_model.User{}
+	aUser.SetEmail(originalEmail)
 	aUser.SetID(userID)
 
 	data := []struct {
 		name          string
-		command       *changeEmailCommand
-		getUserById   func(ctx context.Context, id string) (*user, error)
+		command       *command_model.ChangeEmailCommand
+		getUserById   func(ctx context.Context, id string) (*command_model.User, error)
 		failed        bool
 		expectedError *ddd.Error
 	}{
 		{
-			name:          "user exists",
-			command:       &changeEmailCommand{Email: newEmail, UserID: userID},
+			name:          "command_model.User exists",
+			command:       &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
 			getUserById:   nil,
 			failed:        false,
 			expectedError: nil,
 		},
 		{
-			name:    "user does not exist",
-			command: &changeEmailCommand{Email: newEmail, UserID: userID},
-			getUserById: func(ctx context.Context, id string) (*user, error) {
-				err := ddd.NewError(fmt.Sprintf("user with id %q does not exist", id), ddd.StatusCodeNotFound)
+			name:    "command_model.User does not exist",
+			command: &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			getUserById: func(ctx context.Context, id string) (*command_model.User, error) {
+				err := ddd.NewError(fmt.Sprintf("command_model.User with id %q does not exist", id), ddd.StatusCodeNotFound)
 				return nil, err
 			},
 			failed:        true,
@@ -242,14 +151,14 @@ func TestChangeEmail(t *testing.T) {
 		},
 		{
 			name:          "missing email validation",
-			command:       &changeEmailCommand{Email: "", UserID: userID},
+			command:       &command_model.ChangeEmailCommand{NewEmail: "", UserID: userID},
 			getUserById:   nil,
 			failed:        true,
 			expectedError: ddd.NewError("email", ddd.StatusCodeBadRequest),
 		},
 		{
-			name:          "missing user validation",
-			command:       &changeEmailCommand{Email: newEmail, UserID: ""},
+			name:          "missing command_model.User validation",
+			command:       &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: ""},
 			getUserById:   nil,
 			failed:        true,
 			expectedError: ddd.NewError("userID", ddd.StatusCodeBadRequest),
@@ -295,7 +204,7 @@ func TestHandlerReceivedCommandOfWrongType(t *testing.T) {
 	fb.b.RegisterCommandHandlerFactory(command, func() (ddd.CommandHandler, error) {
 		return fb.ChangeEmailCommandHandler, nil
 	})
-	setupRepository(fb, &user{})
+	setupRepository(fb, &command_model.User{})
 
 	result, err := fb.b.HandleCommand(context.Background(), command)
 
@@ -305,7 +214,7 @@ func TestHandlerReceivedCommandOfWrongType(t *testing.T) {
 	if err == nil {
 		t.Error("want error not nil, got nil")
 	}
-	expectedCommand := &changeEmailCommand{}
+	expectedCommand := &command_model.ChangeEmailCommand{}
 	if strings.Contains(err.Error(), expectedCommand.CommandName()) != true {
 		t.Errorf("want error with %q, got %q", expectedCommand.CommandName(), err.Error())
 	}
@@ -316,7 +225,8 @@ func TestHandleEventFailure(t *testing.T) {
 	const userID = "1"
 	const originalEmail = "kamel.amit@thaabet.sy"
 	const newEmail = "eli.cohen@mossad.gov.il"
-	aUser := &user{email: originalEmail}
+	aUser := &command_model.User{}
+	aUser.SetEmail(originalEmail)
 	aUser.SetID(userID)
 	setupRepository(fb, aUser)
 	setupEmailChangedEventHandler(fb)
@@ -324,7 +234,7 @@ func TestHandleEventFailure(t *testing.T) {
 	fb.EmailChangedEventHandler.handle = func(ctx context.Context, event ddd.Event) error {
 		return errors.New("the spy that did not come home")
 	}
-	command := &changeEmailCommand{Email: newEmail, UserID: userID}
+	command := &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID}
 
 	_, err := fb.b.HandleCommand(context.Background(), command)
 
@@ -354,22 +264,17 @@ func assertSuccess(t *testing.T, err error, result any, fb *fakeBootstrapper, ne
 		t.Errorf("want email %q, got %q", newEmail, fb.Repository.user.Email())
 	}
 	if fb.Repository.commitCalled != true {
-		t.Errorf("want repository commitCalled true, got %v", fb.Repository.commitCalled)
-	}
-	savedEntities := fb.Repository.SavedEntities()
-	if len(savedEntities) != 1 {
-		t.Errorf("want 1 repository savedEntites, got %v", len(savedEntities))
-	}
-	savedEntity := savedEntities[0]
-	if savedEntity.ID() != userID {
-		t.Errorf("want repository savedEnttiy id %q, got %q", userID, savedEntity.ID())
+		t.Errorf("want adapters.Repository commitCalled true, got %v", fb.Repository.commitCalled)
 	}
 	if fb.EmailChangedEventHandler.commitCalled != true {
 		t.Errorf("want event handler commitCalled true, got %v", fb.EmailChangedEventHandler.commitCalled)
 	}
-	event, ok := fb.EmailChangedEventHandler.event.(*emailChangedEvent)
+	event, ok := fb.EmailChangedEventHandler.event.(*command_model.EmailChangedEvent)
 	if ok == false {
-		t.Errorf("want event %T, got %T", emailChangedEvent{}, event)
+		t.Errorf("want event %T, got %T", command_model.EmailChangedEvent{}, event)
+	}
+	if event.UserID != userID {
+		t.Errorf("want event UserID %q, got %q", userID, event.UserID)
 	}
 	if event.OriginalEmail != originalEmail {
 		t.Errorf("want event OriginalEmail %q, got %q", originalEmail, event.OriginalEmail)
@@ -384,8 +289,8 @@ func assertSuccess(t *testing.T, err error, result any, fb *fakeBootstrapper, ne
 
 func assertFailure(t *testing.T, err error, d struct {
 	name          string
-	command       *changeEmailCommand
-	getUserById   func(ctx context.Context, id string) (*user, error)
+	command       *command_model.ChangeEmailCommand
+	getUserById   func(ctx context.Context, id string) (*command_model.User, error)
 	failed        bool
 	expectedError *ddd.Error
 }, fb *fakeBootstrapper) {
@@ -403,7 +308,7 @@ func assertFailure(t *testing.T, err error, d struct {
 
 	if d.expectedError.StatusCode() != ddd.StatusCodeBadRequest {
 		if fb.Repository.rollbackCalled != true {
-			t.Errorf("expected repository rollbackCalled to be true, got false")
+			t.Errorf("expected adapters.Repository rollbackCalled to be true, got false")
 		}
 	}
 }
@@ -421,7 +326,7 @@ func setupEmailChangedHandledEventHandler(fb *fakeBootstrapper) {
 		fb.MossadEmailCreatedEventHandler.commitCalled = true
 		return nil
 	}
-	fb.MossadEmailCreatedEventHandler.savedEntities = func() []ddd.Entity {
+	fb.MossadEmailCreatedEventHandler.events = func() []ddd.Event {
 		return nil
 	}
 }
@@ -439,30 +344,24 @@ func setupEmailChangedEventHandler(fb *fakeBootstrapper) {
 		fb.EmailChangedEventHandler.commitCalled = true
 		return nil
 	}
-	fb.EmailChangedEventHandler.savedEntities = func() []ddd.Entity {
-		entity := &user{}
-		entity.AddEvent(&mossadEmailCreatedEvent{})
+	fb.EmailChangedEventHandler.events = func() []ddd.Event {
 		// eventWithoutHandler should be ignored silently
-		entity.AddEvent(&eventWithoutHandler{})
-		return []ddd.Entity{entity}
+		return []ddd.Event{&mossadEmailCreatedEvent{}, &eventWithoutHandler{}}
 	}
 }
 
-func setupRepository(fb *fakeBootstrapper, aUser *user) {
+func setupRepository(fb *fakeBootstrapper, aUser *command_model.User) {
 	fb.Repository.user = aUser
-	fb.Repository.saveUser = func(ctx context.Context, user *user) error {
+	fb.Repository.saveUser = func(ctx context.Context, user *command_model.User) error {
 		fb.Repository.user = user
 		fb.Repository.entities = append(fb.Repository.entities, user)
 		return nil
 	}
-	fb.Repository.getUserById = func(ctx context.Context, id string) (*user, error) {
+	fb.Repository.getUserById = func(ctx context.Context, id string) (*command_model.User, error) {
 		if fb.Repository.user.ID() != id {
-			return nil, fmt.Errorf("user not found (id = %q)", id)
+			return nil, fmt.Errorf("command_model.User not found (id = %q)", id)
 		}
 		return fb.Repository.user, nil
-	}
-	fb.Repository.savedEntities = func() []ddd.Entity {
-		return fb.Repository.entities
 	}
 	fb.Repository.commit = func(ctx context.Context) error {
 		fb.Repository.commitCalled = true

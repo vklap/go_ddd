@@ -5,7 +5,10 @@ import (
 	"sync"
 )
 
+// CreateCommandHandler is a function based factory method signature for creating command handlers.
 type CreateCommandHandler func() (CommandHandler, error)
+
+// CreateEventHandler is a function based factory method signature for creating event handlers.
 type CreateEventHandler func() (EventHandler, error)
 
 type commandHandlerFactory struct {

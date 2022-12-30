@@ -1,4 +1,4 @@
-package go_ddd_test
+package ddd_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
 	"github.com/vklap/go_ddd/internal/service_layer/command_handlers"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 	"strings"
 	"testing"
 )
@@ -36,7 +36,7 @@ func (e *eventWithoutHandler) EventName() string {
 
 type stubRepository struct {
 	user           *command_model.User
-	entities       []go_ddd.Entity
+	entities       []ddd.Entity
 	commitCalled   bool
 	rollbackCalled bool
 	getUserById    func(ctx context.Context, id string) (*command_model.User, error)
@@ -60,7 +60,7 @@ func (r *stubRepository) Rollback(ctx context.Context) error {
 }
 
 type fakeBootstrapper struct {
-	b                              *go_ddd.Bootstrapper
+	b                              *ddd.Bootstrapper
 	ChangeEmailCommandHandler      *command_handlers.ChangeEmailCommandHandler
 	EmailChangedEventHandler       *stubEventHandler
 	MossadEmailCreatedEventHandler *stubEventHandler
@@ -68,18 +68,18 @@ type fakeBootstrapper struct {
 }
 
 type stubEventHandler struct {
-	event          go_ddd.Event
+	event          ddd.Event
 	commitCalled   bool
 	rollbackCalled bool
-	entities       []go_ddd.Entity
+	entities       []ddd.Entity
 
-	handle   func(ctx context.Context, event go_ddd.Event) error
+	handle   func(ctx context.Context, event ddd.Event) error
 	commit   func(ctx context.Context) error
 	rollback func(ctx context.Context) error
-	events   func() []go_ddd.Event
+	events   func() []ddd.Event
 }
 
-func (h *stubEventHandler) Handle(ctx context.Context, event go_ddd.Event) error {
+func (h *stubEventHandler) Handle(ctx context.Context, event ddd.Event) error {
 	return h.handle(ctx, event)
 }
 
@@ -91,7 +91,7 @@ func (h *stubEventHandler) Rollback(ctx context.Context) error {
 	return h.rollback(ctx)
 }
 
-func (h *stubEventHandler) Events() []go_ddd.Event {
+func (h *stubEventHandler) Events() []ddd.Event {
 	return h.events()
 }
 
@@ -99,19 +99,19 @@ func newFakeBootstrapper() *fakeBootstrapper {
 	repo := &stubRepository{}
 
 	fb := &fakeBootstrapper{
-		b:                              go_ddd.NewBootstrapper(),
+		b:                              ddd.NewBootstrapper(),
 		Repository:                     repo,
 		ChangeEmailCommandHandler:      command_handlers.NewChangeEmailCommandHandler(repo),
 		EmailChangedEventHandler:       &stubEventHandler{},
 		MossadEmailCreatedEventHandler: &stubEventHandler{},
 	}
-	fb.b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (go_ddd.CommandHandler, error) {
+	fb.b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
 		return fb.ChangeEmailCommandHandler, nil
 	})
-	fb.b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (go_ddd.EventHandler, error) {
+	fb.b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
 		return fb.EmailChangedEventHandler, nil
 	})
-	fb.b.RegisterEventHandlerFactory(&mossadEmailCreatedEvent{}, func() (go_ddd.EventHandler, error) {
+	fb.b.RegisterEventHandlerFactory(&mossadEmailCreatedEvent{}, func() (ddd.EventHandler, error) {
 		return fb.MossadEmailCreatedEventHandler, nil
 	})
 	return fb
@@ -130,7 +130,7 @@ func TestChangeEmail(t *testing.T) {
 		command       *command_model.ChangeEmailCommand
 		getUserById   func(ctx context.Context, id string) (*command_model.User, error)
 		failed        bool
-		expectedError *go_ddd.Error
+		expectedError *ddd.Error
 	}{
 		{
 			name:          "command_model.User exists",
@@ -143,25 +143,25 @@ func TestChangeEmail(t *testing.T) {
 			name:    "command_model.User does not exist",
 			command: &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
 			getUserById: func(ctx context.Context, id string) (*command_model.User, error) {
-				err := go_ddd.NewError(fmt.Sprintf("command_model.User with id %q does not exist", id), go_ddd.StatusCodeNotFound)
+				err := ddd.NewError(fmt.Sprintf("command_model.User with id %q does not exist", id), ddd.StatusCodeNotFound)
 				return nil, err
 			},
 			failed:        true,
-			expectedError: go_ddd.NewError("does not exist", go_ddd.StatusCodeNotFound),
+			expectedError: ddd.NewError("does not exist", ddd.StatusCodeNotFound),
 		},
 		{
 			name:          "missing email validation",
 			command:       &command_model.ChangeEmailCommand{NewEmail: "", UserID: userID},
 			getUserById:   nil,
 			failed:        true,
-			expectedError: go_ddd.NewError("email", go_ddd.StatusCodeBadRequest),
+			expectedError: ddd.NewError("email", ddd.StatusCodeBadRequest),
 		},
 		{
 			name:          "missing command_model.User validation",
 			command:       &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: ""},
 			getUserById:   nil,
 			failed:        true,
-			expectedError: go_ddd.NewError("userID", go_ddd.StatusCodeBadRequest),
+			expectedError: ddd.NewError("userID", ddd.StatusCodeBadRequest),
 		},
 	}
 
@@ -201,7 +201,7 @@ func TestCommandWithoutRegisteredHandler(t *testing.T) {
 func TestHandlerReceivedCommandOfWrongType(t *testing.T) {
 	fb := newFakeBootstrapper()
 	command := &notSupportedCommand{}
-	fb.b.RegisterCommandHandlerFactory(command, func() (go_ddd.CommandHandler, error) {
+	fb.b.RegisterCommandHandlerFactory(command, func() (ddd.CommandHandler, error) {
 		return fb.ChangeEmailCommandHandler, nil
 	})
 	setupRepository(fb, &command_model.User{})
@@ -231,7 +231,7 @@ func TestHandleEventFailure(t *testing.T) {
 	setupRepository(fb, aUser)
 	setupEmailChangedEventHandler(fb)
 	setupEmailChangedHandledEventHandler(fb)
-	fb.EmailChangedEventHandler.handle = func(ctx context.Context, event go_ddd.Event) error {
+	fb.EmailChangedEventHandler.handle = func(ctx context.Context, event ddd.Event) error {
 		return errors.New("the spy that did not come home")
 	}
 	command := &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID}
@@ -292,9 +292,9 @@ func assertFailure(t *testing.T, err error, d struct {
 	command       *command_model.ChangeEmailCommand
 	getUserById   func(ctx context.Context, id string) (*command_model.User, error)
 	failed        bool
-	expectedError *go_ddd.Error
+	expectedError *ddd.Error
 }, fb *fakeBootstrapper) {
-	dddError, ok := err.(*go_ddd.Error)
+	dddError, ok := err.(*ddd.Error)
 	if ok == true {
 		if dddError.StatusCode() != d.expectedError.StatusCode() {
 			t.Errorf("want err status code %q, got %q", d.expectedError.StatusCode(), dddError.StatusCode())
@@ -306,7 +306,7 @@ func assertFailure(t *testing.T, err error, d struct {
 		t.Errorf("want err %T, got %T", d.expectedError, dddError)
 	}
 
-	if d.expectedError.StatusCode() != go_ddd.StatusCodeBadRequest {
+	if d.expectedError.StatusCode() != ddd.StatusCodeBadRequest {
 		if fb.Repository.rollbackCalled != true {
 			t.Errorf("expected adapters.Repository rollbackCalled to be true, got false")
 		}
@@ -314,7 +314,7 @@ func assertFailure(t *testing.T, err error, d struct {
 }
 
 func setupEmailChangedHandledEventHandler(fb *fakeBootstrapper) {
-	fb.MossadEmailCreatedEventHandler.handle = func(ctx context.Context, event go_ddd.Event) error {
+	fb.MossadEmailCreatedEventHandler.handle = func(ctx context.Context, event ddd.Event) error {
 		fb.MossadEmailCreatedEventHandler.event = event
 		return nil
 	}
@@ -326,13 +326,13 @@ func setupEmailChangedHandledEventHandler(fb *fakeBootstrapper) {
 		fb.MossadEmailCreatedEventHandler.commitCalled = true
 		return nil
 	}
-	fb.MossadEmailCreatedEventHandler.events = func() []go_ddd.Event {
+	fb.MossadEmailCreatedEventHandler.events = func() []ddd.Event {
 		return nil
 	}
 }
 
 func setupEmailChangedEventHandler(fb *fakeBootstrapper) {
-	fb.EmailChangedEventHandler.handle = func(ctx context.Context, event go_ddd.Event) error {
+	fb.EmailChangedEventHandler.handle = func(ctx context.Context, event ddd.Event) error {
 		fb.EmailChangedEventHandler.event = event
 		return nil
 	}
@@ -344,9 +344,9 @@ func setupEmailChangedEventHandler(fb *fakeBootstrapper) {
 		fb.EmailChangedEventHandler.commitCalled = true
 		return nil
 	}
-	fb.EmailChangedEventHandler.events = func() []go_ddd.Event {
+	fb.EmailChangedEventHandler.events = func() []ddd.Event {
 		// eventWithoutHandler should be ignored silently
-		return []go_ddd.Event{&mossadEmailCreatedEvent{}, &eventWithoutHandler{}}
+		return []ddd.Event{&mossadEmailCreatedEvent{}, &eventWithoutHandler{}}
 	}
 }
 

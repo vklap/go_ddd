@@ -1,4 +1,4 @@
-package go_ddd
+package ddd
 
 import (
 	"fmt"

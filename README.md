@@ -1,4 +1,5 @@
-# go-go_ddd - A Domain-Driven Design (DDD) Framework for Go Developers <img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="25"/><img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="23"/><img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="21"/>
+# A Domain-Driven Design (DDD) Framework for Go Developers <img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="25"/><img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="23"/><img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="21"/>
+[![Go Reference](https://pkg.go.dev/badge/github.com/vklap/go_ddd.svg)](https://pkg.go.dev/github.com/vklap/go_ddd)
 
 ## What is this library good for?
 This is a lightweight framework that provides a quick setup for
@@ -13,6 +14,23 @@ are easy to unit test - and is based on battle tested DDD Design Patterns, such 
 
 This library has no external dependencies :beers:
 
+## Installation
+
+```shell
+go get -u github.com/vklap/go_ddd
+```
+
+## Import
+
+```go
+
+import "github.com/vklap/go_ddd/pkg/ddd"
+
+func main() {
+    b := ddd.NewBootstrapper()
+}
+
+```
 
 ## How to implement it?
 
@@ -45,7 +63,7 @@ and the [EmailChangedEvent](https://github.com/vklap/go_ddd/blob/main/internal/d
 ```go
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/go_ddd"
+import "github.com/vklap/go_ddd/pkg/ddd"
 
 // ChangeEmailCommand contains the data required to change the user's email.
 // Besides this, it also represents a main flow.
@@ -76,7 +94,7 @@ var _ go_ddd.Command = (*ChangeEmailCommand)(nil)
 ```go
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/go_ddd"
+import "github.com/vklap/go_ddd/pkg/ddd"
 
 // EmailChangedEvent contains the data required to notify about the email modification.
 // Besides this, it also represents a side effect flow that should be implemented.
@@ -98,7 +116,7 @@ Next, let's implement the [User](https://github.com/vklap/go_ddd/blob/main/inter
 ```go
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/go_ddd"
+import "github.com/vklap/go_ddd/pkg/ddd"
 
 // User is composed of go_ddd.BaseEntity which exposes the entity's ID and Events,
 // and the user's Email.
@@ -139,7 +157,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 // usersById is used solely for demo purposes, to support the InMemoryRepository
@@ -261,7 +279,7 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 // ChangeEmailCommandHandler implements go_ddd.CommandHandler.
@@ -332,7 +350,7 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 // EmailChangedEventHandler implements go_ddd.EventHandler.
@@ -394,7 +412,7 @@ import (
 	"github.com/vklap/go_ddd/internal/domain/command_model"
 	"github.com/vklap/go_ddd/internal/service_layer/command_handlers"
 	"github.com/vklap/go_ddd/internal/service_layer/event_handlers"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 var b *go_ddd.Bootstrapper
@@ -475,3 +493,8 @@ func main() {
 	worker.Start()
 }
 ```
+
+## Links
+
+- [pkg.go.dev](https://pkg.go.dev/github.com/vklap/go_ddd/pkg/ddd)
+- [README.md](https://github.com/vklap/go_ddd/blob/main/README.md)

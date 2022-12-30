@@ -1,7 +1,7 @@
-package worker
+package main
 
 import "github.com/vklap/go_ddd/internal/entrypoints/worker"
 
-func doDork() {
+func main() {
 	worker.Start()
 }

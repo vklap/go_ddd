@@ -1,5 +1,5 @@
 # A Domain-Driven Design (DDD) Framework for Go Developers <img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="25"/><img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="23"/><img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/66955/gopher.svg" alt="gopher" width="21"/>
-[![Go Reference](https://pkg.go.dev/badge/github.com/vklap/go_ddd.svg)](https://pkg.go.dev/github.com/vklap/go_ddd)
+[![Go Reference](https://pkg.go.dev/badge/github.com/vklap/ddd.svg)](https://pkg.go.dev/github.com/vklap/go_ddd)
 
 ## What is this library good for?
 This is a lightweight framework that provides a quick setup for
@@ -74,10 +74,10 @@ type ChangeEmailCommand struct {
 
 func (c *ChangeEmailCommand) IsValid() error {
 	if c.UserID == "" {
-		return go_ddd.NewError("userID cannot be empty", go_ddd.StatusCodeBadRequest)
+		return ddd.NewError("userID cannot be empty", ddd.StatusCodeBadRequest)
 	}
 	if c.NewEmail == "" {
-		return go_ddd.NewError("email cannot be empty", go_ddd.StatusCodeBadRequest)
+		return ddd.NewError("email cannot be empty", ddd.StatusCodeBadRequest)
 	}
 	return nil
 }
@@ -86,8 +86,8 @@ func (c *ChangeEmailCommand) CommandName() string {
 	return "ChangeEmailCommand"
 }
 
-// The below line ensures at compile time that ChangeEmailCommand adheres to the go_ddd.Command interface 
-var _ go_ddd.Command = (*ChangeEmailCommand)(nil)
+// The below line ensures at compile time that ChangeEmailCommand adheres to the ddd.Command interface 
+var _ ddd.Command = (*ChangeEmailCommand)(nil)
 ```
 
 #### EmailChangedEvent
@@ -108,8 +108,8 @@ func (e *EmailChangedEvent) EventName() string {
 	return "EmailChangedEvent"
 }
 
-// The below line ensures at compile time that EmailChangedEvent adheres to the go_ddd.Event interface
-var _ go_ddd.Event = (*EmailChangedEvent)(nil)
+// The below line ensures at compile time that EmailChangedEvent adheres to the ddd.Event interface
+var _ ddd.Event = (*EmailChangedEvent)(nil)
 ```
 
 Next, let's implement the [User](https://github.com/vklap/go_ddd/blob/main/internal/domain/command_model/user.go) Entity:
@@ -118,10 +118,10 @@ package command_model
 
 import "github.com/vklap/go_ddd/pkg/ddd"
 
-// User is composed of go_ddd.BaseEntity which exposes the entity's ID and Events,
+// User is composed of ddd.BaseEntity which exposes the entity's ID and Events,
 // and the user's Email.
 type User struct {
-	go_ddd.BaseEntity
+	ddd.BaseEntity
 	email string
 }
 
@@ -137,8 +137,8 @@ func (u *User) SetEmail(value string) {
 	u.email = value
 }
 
-// The below line ensures at compile time that User adheres to the go_ddd.Entity interface
-var _ go_ddd.Entity = (*User)(nil)
+// The below line ensures at compile time that User adheres to the ddd.Entity interface
+var _ ddd.Entity = (*User)(nil)
 ```
 
 ### Step 2: Adapters
@@ -173,7 +173,7 @@ func init() {
 type Repository interface {
 	GetUserById(ctx context.Context, id string) (*command_model.User, error)
 	SaveUser(ctx context.Context, user *command_model.User) error
-	go_ddd.RollbackCommitter
+	ddd.RollbackCommitter
 }
 
 // InMemoryRepository is used for demo purposes.
@@ -183,7 +183,7 @@ type InMemoryRepository struct{}
 func (r *InMemoryRepository) GetUserById(ctx context.Context, id string) (*command_model.User, error) {
 	user, ok := usersById[id]
 	if ok == false {
-		return nil, go_ddd.NewError(fmt.Sprintf("user with id %q does not exist", id), go_ddd.StatusCodeNotFound)
+		return nil, ddd.NewError(fmt.Sprintf("user with id %q does not exist", id), ddd.StatusCodeNotFound)
 	}
 	return user, nil
 }
@@ -282,10 +282,10 @@ import (
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// ChangeEmailCommandHandler implements go_ddd.CommandHandler.
+// ChangeEmailCommandHandler implements ddd.CommandHandler.
 type ChangeEmailCommandHandler struct {
 	repository adapters.Repository
-	events     []go_ddd.Event
+	events     []ddd.Event
 }
 
 // NewChangeEmailCommandHandler is a constructor function to be used by the Bootstrapper.
@@ -294,7 +294,7 @@ func NewChangeEmailCommandHandler(repository adapters.Repository) *ChangeEmailCo
 }
 
 // Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
-func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command go_ddd.Command) (any, error) {
+func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
 	changeEmailCommand, ok := command.(*command_model.ChangeEmailCommand)
 	if ok == false {
 		return nil, fmt.Errorf("ChangeEmailCommandHandler expects a command of type %T", changeEmailCommand)
@@ -333,11 +333,11 @@ func (h *ChangeEmailCommandHandler) Rollback(ctx context.Context) error {
 
 // Events reports about events. 
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
-func (h *ChangeEmailCommandHandler) Events() []go_ddd.Event {
+func (h *ChangeEmailCommandHandler) Events() []ddd.Event {
 	return h.events
 }
 
-var _ go_ddd.CommandHandler = (*ChangeEmailCommandHandler)(nil)
+var _ ddd.CommandHandler = (*ChangeEmailCommandHandler)(nil)
 ```
 
 #### EmailChangedEventHandler
@@ -353,7 +353,7 @@ import (
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// EmailChangedEventHandler implements go_ddd.EventHandler.
+// EmailChangedEventHandler implements ddd.EventHandler.
 type EmailChangedEventHandler struct {
 	emailClient adapters.EmailClient
 }
@@ -364,7 +364,7 @@ func NewEmailChangedEventHandler(emailClient adapters.EmailClient) *EmailChanged
 }
 
 // Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
-func (h *EmailChangedEventHandler) Handle(ctx context.Context, event go_ddd.Event) error {
+func (h *EmailChangedEventHandler) Handle(ctx context.Context, event ddd.Event) error {
 	emailChangedEvent, ok := event.(*command_model.EmailChangedEvent)
 	if ok == false {
 		panic(fmt.Sprintf("failed to handle email changed: want %T, got %T", &command_model.EmailChangedEvent{}, emailChangedEvent))
@@ -390,11 +390,11 @@ func (h *EmailChangedEventHandler) Rollback(ctx context.Context) error {
 
 // Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
-func (h *EmailChangedEventHandler) Events() []go_ddd.Event {
+func (h *EmailChangedEventHandler) Events() []ddd.Event {
 	return nil
 }
 
-var _ go_ddd.EventHandler = (*EmailChangedEventHandler)(nil)
+var _ ddd.EventHandler = (*EmailChangedEventHandler)(nil)
 ```
 
 ### Step 4: The `Bootrapper`
@@ -415,16 +415,16 @@ import (
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-var b *go_ddd.Bootstrapper
+var b *ddd.Bootstrapper
 var pubSubClient adapters.PubSubClient
 
 // init creates the bootstrapper instance and registers the command and event handlers.
 func init() {
-	b = go_ddd.NewBootstrapper()
-	b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (go_ddd.CommandHandler, error) {
+	b = ddd.NewBootstrapper()
+	b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
 		return command_handlers.NewChangeEmailCommandHandler(&adapters.InMemoryRepository{}), nil
 	})
-	b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (go_ddd.EventHandler, error) {
+	b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
 		return event_handlers.NewEmailChangedEventHandler(&adapters.InMemoryEmailClient{}), nil
 	})
 	pubSubClient = &adapters.InMemoryPubSubClient{}
@@ -437,7 +437,7 @@ func GetPubSubClientInstance() adapters.PubSubClient {
 
 // HandleCommand encapsulates the Bootstrapper HandleCommand, and gives a strongly typed interface
 // provided by go's generics.
-func HandleCommand[Command go_ddd.Command](ctx context.Context, command Command) (any, error) {
+func HandleCommand[Command ddd.Command](ctx context.Context, command Command) (any, error) {
 	return b.HandleCommand(ctx, command)
 }
 ```

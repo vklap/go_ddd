@@ -6,9 +6,9 @@ This is a lightweight framework that provides a quick setup for
 [Domain-Driven](https://en.wikipedia.org/wiki/Domain-driven_design) designed apps that
 are easy to unit test - and is based on battle tested DDD Design Patterns, such as:
 
-1. `Domain Layer` entities with domain events for handling side effects / Event-Driven Architectures
-2. `Application Service Layer` flow handlers encapsulated with unit of work to commit/rollback operations
-3. `Infrastructure/Adapters Layer` to external resources, such as: database repositories, web service clients, etc.
+1. `Domain Layer` entities with domain events for handling side effects (or even support Event-Driven Architectures) 
+2. `Application Service Layer` flow handlers that are being executed by units of work (to commit/rollback operations)
+3. `Infrastructure/Adapters Layer` to external resources (such as: database repositories, web service clients, etc.)
 4. `CQRS` (Command Query Responsibility Separation) with domain commands
 
 
@@ -55,6 +55,9 @@ Applying DDD in the code consists of the following steps:
 - **Step 6**: Specify the golang `main` function  
 
 ### Step 1: Domain Modeling
+
+The `Domain Layer` should contain only in memory business logic and business rules,
+and should not be aware of external dependencies, such as databases, web services, file system, etc.
 
 Let's first implement the [ChangeEmailCommand](https://github.com/vklap/go_ddd/blob/main/internal/domain/command_model/change_email_command.go) 
 and the [EmailChangedEvent](https://github.com/vklap/go_ddd/blob/main/internal/domain/command_model/email_changed_event.go):
@@ -143,7 +146,9 @@ var _ ddd.Entity = (*User)(nil)
 
 ### Step 2: Adapters
 
-Add the adapters that communicate with the "outside world":
+The `Adapters Layer` is responsible for communicating with external resources only, 
+and should not contain any business logic.
+
 - [Repository](https://github.com/vklap/go_ddd/blob/main/internal/adapters/repository.go)
 - [EmailClient](https://github.com/vklap/go_ddd/blob/main/internal/adapters/email_client.go)
 - [PubSubClient](https://github.com/vklap/go_ddd/blob/main/internal/adapters/pubsub_client.go)
@@ -264,9 +269,13 @@ var _ PubSubClient = (*InMemoryPubSubClient)(nil)
 
 ### Step 3: The `Command` and `Event` Handlers
 
-Manage the **main flow** which is `change email` with [ChangeEmailCommandHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/command_handlers/change_email_command_handler.go),
-that registers events, which will eventually be handled by event handlers (if they exist). 
-In this sample implementation, the `change email` flow registers an `EmailChangedEvent`, which will be handled
+The `Service Layer` is responsible for managing applicative flows and as such contains 
+references to both the `Domain Layer` and the `Adapters Layer`.
+
+In our use case, the **main flow** which is `change email`, is handled by [ChangeEmailCommandHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/command_handlers/change_email_command_handler.go) -
+which registers events that will eventually be handled by event handlers (if they exist). 
+
+In the below implementation, the `change email` flow registers an `EmailChangedEvent`, which will be handled
 by [EmailChangedEventHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/event_handlers/email_changed_event_handler.go).
 
 #### ChangeEmailCommandHandler
@@ -302,20 +311,25 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 	
 	// No need to call changeEmailCommand.IsValid() - as it's being called by the framework.
 
+	// Delegate fetching data to the repository, which belongs to the Adapters Layer.
 	user, err := h.repository.GetUserById(ctx, changeEmailCommand.UserID)
 	if err != nil {
 		return nil, err
 	}
 
+	// Delegate updating the email to the user, which is a Domain Entity.
+	// The SetEmail email method is responsible to detect if the email was changed,
+	// and if so, then it will record an EmailChangedEvent. 
 	user.SetEmail(changeEmailCommand.NewEmail)
 
+	// Delegate storing data to the repository, which belongs to the Adapters Layer.
 	if err = h.repository.SaveUser(ctx, user); err != nil {
 		return nil, err
 	}
 
 	// This is where Domain events are being registered by the handler,
-	// so they can eventually be dispatched to event handlers - such as:
-	// EmailChangedEventHandler
+	// so they can eventually be dispatched to event handlers (if they exist). 
+	// In our use case the events will be dispatched to the EmailChangedEventHandler.
 	h.events = append(h.events, user.Events()...)
 
 	return nil, nil

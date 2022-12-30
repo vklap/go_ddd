@@ -28,20 +28,25 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 
 	// No need to call changeEmailCommand.IsValid() - as it's being called by the framework.
 
+	// Delegate fetching data to the repository, which belongs to the Adapters Layer.
 	user, err := h.repository.GetUserById(ctx, changeEmailCommand.UserID)
 	if err != nil {
 		return nil, err
 	}
 
+	// Delegate updating the email to the user, which is a Domain Entity.
+	// The SetEmail email method is responsible to detect if the email was changed,
+	// and if so, then it will record an EmailChangedEvent.
 	user.SetEmail(changeEmailCommand.NewEmail)
 
+	// Delegate storing data to the repository, which belongs to the Adapters Layer.
 	if err = h.repository.SaveUser(ctx, user); err != nil {
 		return nil, err
 	}
 
 	// This is where Domain events are being registered by the handler,
-	// so they can eventually be dispatched to event handlers - such as:
-	// EmailChangedEventHandler
+	// so they can eventually be dispatched to event handlers (if they exist).
+	// In our use case the events will be dispatched to the EmailChangedEventHandler.
 	h.events = append(h.events, user.Events()...)
 
 	return nil, nil

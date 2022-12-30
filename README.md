@@ -13,6 +13,23 @@ are easy to unit test - and is based on battle tested DDD Design Patterns, such 
 
 This library has no external dependencies :beers:
 
+## Installation
+
+```shell
+go get -u github.com/vklap/go_ddd
+```
+
+## Import
+
+```go
+
+import "github.com/vklap/go_ddd/pkg/ddd"
+
+func main() {
+    b := ddd.NewBootstrapper()
+}
+
+```
 
 ## How to implement it?
 

@@ -272,10 +272,10 @@ var _ PubSubClient = (*InMemoryPubSubClient)(nil)
 The `Service Layer` is responsible for managing applicative flows and as such contains 
 references to both the `Domain Layer` and the `Adapters Layer`.
 
-In our use case, the **main flow** which is `change email`, is handled by [ChangeEmailCommandHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/command_handlers/change_email_command_handler.go) -
+In our use case, the `change email` main flow is handled by [ChangeEmailCommandHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/command_handlers/change_email_command_handler.go) -
 which registers events that will eventually be handled by event handlers (if they exist). 
 
-In the below implementation, the `change email` flow registers an `EmailChangedEvent`, which will be handled
+In the below implementation, the `change email` flow registers an `EmailChangedEvent`, that will be handled
 by [EmailChangedEventHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/event_handlers/email_changed_event_handler.go).
 
 #### ChangeEmailCommandHandler
@@ -322,12 +322,12 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 	// and if so, then it will record an EmailChangedEvent. 
 	user.SetEmail(changeEmailCommand.NewEmail)
 
-	// Delegate storing data to the repository, which belongs to the Adapters Layer.
+	// Delegate storing data to the repository.
 	if err = h.repository.SaveUser(ctx, user); err != nil {
 		return nil, err
 	}
 
-	// This is where Domain events are being registered by the handler,
+	// This is where Domain events are being registered,
 	// so they can eventually be dispatched to event handlers (if they exist). 
 	// In our use case the events will be dispatched to the EmailChangedEventHandler.
 	h.events = append(h.events, user.Events()...)

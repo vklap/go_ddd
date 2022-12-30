@@ -39,12 +39,12 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 	// and if so, then it will record an EmailChangedEvent.
 	user.SetEmail(changeEmailCommand.NewEmail)
 
-	// Delegate storing data to the repository, which belongs to the Adapters Layer.
+	// Delegate storing data to the repository.
 	if err = h.repository.SaveUser(ctx, user); err != nil {
 		return nil, err
 	}
 
-	// This is where Domain events are being registered by the handler,
+	// This is where Domain events are being registered,
 	// so they can eventually be dispatched to event handlers (if they exist).
 	// In our use case the events will be dispatched to the EmailChangedEventHandler.
 	h.events = append(h.events, user.Events()...)

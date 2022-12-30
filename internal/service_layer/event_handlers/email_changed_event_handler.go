@@ -33,18 +33,21 @@ func (h *EmailChangedEventHandler) Handle(ctx context.Context, event ddd.Event) 
 
 // Commit is responsible for committing the changes performed by the Handle method, such as
 // committing a database transaction managed by the repository.
+// This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *EmailChangedEventHandler) Commit(ctx context.Context) error {
 	return nil
 }
 
 // Rollback is responsible to rollback changes performed by the Handle method, such as
 // rollback a database transaction managed by the repository.
+// This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *EmailChangedEventHandler) Rollback(ctx context.Context) error {
 	return nil
 }
 
 // Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
+// This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *EmailChangedEventHandler) Events() []ddd.Event {
 	return nil
 }

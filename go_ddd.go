@@ -3,5 +3,5 @@ package go_ddd
 import "fmt"
 
 func main() {
-	fmt.Println("Hello GO")
+	fmt.Println("Hello Go DDD")
 }

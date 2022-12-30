@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/ddd"
+	"github.com/vklap/go_ddd/pkg/go_ddd"
 )
 
-// ChangeEmailCommandHandler implements ddd.CommandHandler.
+// ChangeEmailCommandHandler implements go_ddd.CommandHandler.
 type ChangeEmailCommandHandler struct {
 	repository adapters.Repository
-	events     []ddd.Event
+	events     []go_ddd.Event
 }
 
 // NewChangeEmailCommandHandler is a constructor function to be used by the Bootstrapper.
@@ -20,7 +20,7 @@ func NewChangeEmailCommandHandler(repository adapters.Repository) *ChangeEmailCo
 }
 
 // Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
-func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
+func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command go_ddd.Command) (any, error) {
 	changeEmailCommand, ok := command.(*command_model.ChangeEmailCommand)
 	if ok == false {
 		return nil, fmt.Errorf("ChangeEmailCommandHandler expects a command of type %T", changeEmailCommand)
@@ -59,8 +59,8 @@ func (h *ChangeEmailCommandHandler) Rollback(ctx context.Context) error {
 
 // Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
-func (h *ChangeEmailCommandHandler) Events() []ddd.Event {
+func (h *ChangeEmailCommandHandler) Events() []go_ddd.Event {
 	return h.events
 }
 
-var _ ddd.CommandHandler = (*ChangeEmailCommandHandler)(nil)
+var _ go_ddd.CommandHandler = (*ChangeEmailCommandHandler)(nil)

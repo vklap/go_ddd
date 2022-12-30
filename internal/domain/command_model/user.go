@@ -1,11 +1,11 @@
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/ddd"
+import "github.com/vklap/go_ddd/pkg/go_ddd"
 
-// User is composed of ddd.BaseEntity which exposes the entity's ID and Events,
+// User is composed of go_ddd.BaseEntity which exposes the entity's ID and Events,
 // and the user's Email.
 type User struct {
-	ddd.BaseEntity
+	go_ddd.BaseEntity
 	email string
 }
 
@@ -21,5 +21,5 @@ func (u *User) SetEmail(value string) {
 	u.email = value
 }
 
-// The below line ensures at compile time that User adheres to the ddd.Entity interface
-var _ ddd.Entity = (*User)(nil)
+// The below line ensures at compile time that User adheres to the go_ddd.Entity interface
+var _ go_ddd.Entity = (*User)(nil)

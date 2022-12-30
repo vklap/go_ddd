@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// EmailChangedEventHandler implements go_ddd.EventHandler.
+// EmailChangedEventHandler implements ddd.EventHandler.
 type EmailChangedEventHandler struct {
 	emailClient adapters.EmailClient
 }
@@ -19,7 +19,7 @@ func NewEmailChangedEventHandler(emailClient adapters.EmailClient) *EmailChanged
 }
 
 // Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
-func (h *EmailChangedEventHandler) Handle(ctx context.Context, event go_ddd.Event) error {
+func (h *EmailChangedEventHandler) Handle(ctx context.Context, event ddd.Event) error {
 	emailChangedEvent, ok := event.(*command_model.EmailChangedEvent)
 	if ok == false {
 		panic(fmt.Sprintf("failed to handle email changed: want %T, got %T", &command_model.EmailChangedEvent{}, emailChangedEvent))
@@ -45,8 +45,8 @@ func (h *EmailChangedEventHandler) Rollback(ctx context.Context) error {
 
 // Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
-func (h *EmailChangedEventHandler) Events() []go_ddd.Event {
+func (h *EmailChangedEventHandler) Events() []ddd.Event {
 	return nil
 }
 
-var _ go_ddd.EventHandler = (*EmailChangedEventHandler)(nil)
+var _ ddd.EventHandler = (*EmailChangedEventHandler)(nil)

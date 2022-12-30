@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 // usersById is used solely for demo purposes, to support the InMemoryRepository
@@ -20,7 +20,7 @@ func init() {
 type Repository interface {
 	GetUserById(ctx context.Context, id string) (*command_model.User, error)
 	SaveUser(ctx context.Context, user *command_model.User) error
-	go_ddd.RollbackCommitter
+	ddd.RollbackCommitter
 }
 
 // InMemoryRepository is used for demo purposes.
@@ -30,7 +30,7 @@ type InMemoryRepository struct{}
 func (r *InMemoryRepository) GetUserById(ctx context.Context, id string) (*command_model.User, error) {
 	user, ok := usersById[id]
 	if ok == false {
-		return nil, go_ddd.NewError(fmt.Sprintf("user with id %q does not exist", id), go_ddd.StatusCodeNotFound)
+		return nil, ddd.NewError(fmt.Sprintf("user with id %q does not exist", id), ddd.StatusCodeNotFound)
 	}
 	return user, nil
 }

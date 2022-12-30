@@ -45,7 +45,7 @@ and the [EmailChangedEvent](https://github.com/vklap/go_ddd/blob/main/internal/d
 ```go
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/go_ddd"
+import "github.com/vklap/go_ddd/pkg/ddd"
 
 // ChangeEmailCommand contains the data required to change the user's email.
 // Besides this, it also represents a main flow.
@@ -68,7 +68,7 @@ func (c *ChangeEmailCommand) CommandName() string {
 	return "ChangeEmailCommand"
 }
 
-// The below line ensures at compile time that ChangeEmailCommand adheres to the go_ddd.Command interface 
+// The below line ensures at compile time that ChangeEmailCommand adheres to the ddd.Command interface 
 var _ go_ddd.Command = (*ChangeEmailCommand)(nil)
 ```
 
@@ -76,7 +76,7 @@ var _ go_ddd.Command = (*ChangeEmailCommand)(nil)
 ```go
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/go_ddd"
+import "github.com/vklap/go_ddd/pkg/ddd"
 
 // EmailChangedEvent contains the data required to notify about the email modification.
 // Besides this, it also represents a side effect flow that should be implemented.
@@ -90,7 +90,7 @@ func (e *EmailChangedEvent) EventName() string {
 	return "EmailChangedEvent"
 }
 
-// The below line ensures at compile time that EmailChangedEvent adheres to the go_ddd.Event interface
+// The below line ensures at compile time that EmailChangedEvent adheres to the ddd.Event interface
 var _ go_ddd.Event = (*EmailChangedEvent)(nil)
 ```
 
@@ -98,9 +98,9 @@ Next, let's implement the [User](https://github.com/vklap/go_ddd/blob/main/inter
 ```go
 package command_model
 
-import "github.com/vklap/go_ddd/pkg/go_ddd"
+import "github.com/vklap/go_ddd/pkg/ddd"
 
-// User is composed of go_ddd.BaseEntity which exposes the entity's ID and Events,
+// User is composed of ddd.BaseEntity which exposes the entity's ID and Events,
 // and the user's Email.
 type User struct {
 	go_ddd.BaseEntity
@@ -119,7 +119,7 @@ func (u *User) SetEmail(value string) {
 	u.email = value
 }
 
-// The below line ensures at compile time that User adheres to the go_ddd.Entity interface
+// The below line ensures at compile time that User adheres to the ddd.Entity interface
 var _ go_ddd.Entity = (*User)(nil)
 ```
 
@@ -139,7 +139,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 // usersById is used solely for demo purposes, to support the InMemoryRepository
@@ -261,10 +261,10 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// ChangeEmailCommandHandler implements go_ddd.CommandHandler.
+// ChangeEmailCommandHandler implements ddd.CommandHandler.
 type ChangeEmailCommandHandler struct {
 	repository adapters.Repository
 	events     []go_ddd.Event
@@ -332,10 +332,10 @@ import (
 	"fmt"
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// EmailChangedEventHandler implements go_ddd.EventHandler.
+// EmailChangedEventHandler implements ddd.EventHandler.
 type EmailChangedEventHandler struct {
 	emailClient adapters.EmailClient
 }
@@ -394,7 +394,7 @@ import (
 	"github.com/vklap/go_ddd/internal/domain/command_model"
 	"github.com/vklap/go_ddd/internal/service_layer/command_handlers"
 	"github.com/vklap/go_ddd/internal/service_layer/event_handlers"
-	"github.com/vklap/go_ddd/pkg/go_ddd"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
 var b *go_ddd.Bootstrapper

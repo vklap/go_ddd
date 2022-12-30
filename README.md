@@ -43,8 +43,8 @@ The below explanations are based on this sample implementation.
 
 Imagine a simple background job for changing a user's email :email: that consists of:
 
-1. The main flow: modify the user's email, and persisting it in the database.
-2. A side effect flows: sending the user a notification email about the above modification.
+1. The main flow: modify the user's email, and persist it in the database.
+2. A side effect flow: send the user a notification email about the above modification.
 
 Applying DDD in the code consists of the following steps:
 - **Step 1**: `Domain Modeling` of the `Commands`, `Events`, and `Entities`

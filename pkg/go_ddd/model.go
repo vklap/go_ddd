@@ -1,4 +1,4 @@
-package ddd
+package go_ddd
 
 // Command interface that should be implemented by commands.
 type Command interface {

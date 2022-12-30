@@ -1,4 +1,4 @@
-package ddd
+package go_ddd
 
 // StatusCodeNotFound is a string that represents a "not found" error.
 const StatusCodeNotFound = "not_found"

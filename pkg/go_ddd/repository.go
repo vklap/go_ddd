@@ -1,4 +1,4 @@
-package ddd
+package go_ddd
 
 import (
 	"context"

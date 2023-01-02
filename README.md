@@ -490,7 +490,8 @@ func Start() {
 		var command command_model.ChangeEmailCommand
 		err = json.Unmarshal(message, &command)
 		if err != nil {
-			panic(err)
+			log.Printf("failed to unmarshal ChangeEmailCommand: %v (message: %v)", err, message)
+			continue
 		}
 		_, err = boostrapper.HandleCommand[*command_model.ChangeEmailCommand](context.Background(), &command)
 		if err != nil {

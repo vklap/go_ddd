@@ -519,5 +519,5 @@ func main() {
 
 ## Links
 
-- [pkg.go.dev](https://pkg.go.dev/github.com/vklap/go_ddd/pkg/ddd)
+- [pkg.go.dev](https://pkg.go.dev/github.com/vklap/go_ddd)
 - [README.md](https://github.com/vklap/go_ddd/blob/main/README.md)

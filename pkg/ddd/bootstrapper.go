@@ -1,3 +1,10 @@
+// Package ddd is a Domain-Driven Design (DDD) Framework.
+//
+// To install, `run go get -u github.com/vklap/go_ddd`
+//
+// Documentation can be found at:
+// - https://github.com/vklap/go_ddd/blob/main/README.md
+// - https://pkg.go.dev/github.com/vklap/go_ddd
 package ddd
 
 import (

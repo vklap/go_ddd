@@ -2,7 +2,7 @@ package ddd
 
 import (
 	"context"
-	"log"
+	"fmt"
 )
 
 type commandUnitOfWork struct {
@@ -17,7 +17,7 @@ func (uow *commandUnitOfWork) HandleCommand(ctx context.Context, command Command
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {
-			log.Printf("failed to rollback commandUnitOfWork: %v", rollbackErr)
+			return nil, fmt.Errorf("rollback failed with %v after getting %v", rollbackErr, err)
 		}
 		return result, err
 	}
@@ -37,7 +37,7 @@ func (uow *eventUnitOfWork) HandleEvent(ctx context.Context, event Event) (err e
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {
-			log.Printf("failed to rollback eventUnitOfWork: %v", rollbackErr)
+			return fmt.Errorf("rollback failed with %v after getting %v", rollbackErr, err)
 		}
 		return err
 	}

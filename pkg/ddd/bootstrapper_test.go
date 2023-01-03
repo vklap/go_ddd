@@ -118,6 +118,7 @@ func newFakeBootstrapper() *fakeBootstrapper {
 }
 
 func TestChangeEmail(t *testing.T) {
+	const rollbackErrorMessage = "something terrible happened"
 	const userID = "1"
 	const originalEmail = "kamel.amit@thaabet.sy"
 	const newEmail = "eli.cohen@mossad.gov.il"
@@ -126,21 +127,55 @@ func TestChangeEmail(t *testing.T) {
 	aUser.SetID(userID)
 
 	data := []struct {
-		name          string
-		command       *command_model.ChangeEmailCommand
-		getUserById   func(ctx context.Context, id string) (*command_model.User, error)
-		failed        bool
-		expectedError *ddd.Error
+		name                   string
+		command                *command_model.ChangeEmailCommand
+		getUserById            func(ctx context.Context, id string) (*command_model.User, error)
+		failed                 bool
+		expectedError          *ddd.Error
+		rollback               func(ctx context.Context) error
+		rollbackFailureMessage string
 	}{
 		{
-			name:          "command_model.User exists",
-			command:       &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
-			getUserById:   nil,
-			failed:        false,
-			expectedError: nil,
+			name:                   "command_model.User exists",
+			command:                &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			getUserById:            nil,
+			failed:                 false,
+			expectedError:          nil,
+			rollback:               nil,
+			rollbackFailureMessage: "",
 		},
 		{
-			name:    "command_model.User does not exist",
+			name:    "user does not exist",
+			command: &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			getUserById: func(ctx context.Context, id string) (*command_model.User, error) {
+				err := ddd.NewError(fmt.Sprintf("command_model.User with id %q does not exist", id), ddd.StatusCodeNotFound)
+				return nil, err
+			},
+			failed:                 true,
+			expectedError:          ddd.NewError("does not exist", ddd.StatusCodeNotFound),
+			rollback:               nil,
+			rollbackFailureMessage: "",
+		},
+		{
+			name:                   "missing email validation",
+			command:                &command_model.ChangeEmailCommand{NewEmail: "", UserID: userID},
+			getUserById:            nil,
+			failed:                 true,
+			expectedError:          ddd.NewError("email", ddd.StatusCodeBadRequest),
+			rollback:               nil,
+			rollbackFailureMessage: "",
+		},
+		{
+			name:                   "missing command_model.User validation",
+			command:                &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: ""},
+			getUserById:            nil,
+			failed:                 true,
+			expectedError:          ddd.NewError("userID", ddd.StatusCodeBadRequest),
+			rollback:               nil,
+			rollbackFailureMessage: "",
+		},
+		{
+			name:    "user does not exist and rollback failed",
 			command: &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
 			getUserById: func(ctx context.Context, id string) (*command_model.User, error) {
 				err := ddd.NewError(fmt.Sprintf("command_model.User with id %q does not exist", id), ddd.StatusCodeNotFound)
@@ -148,20 +183,10 @@ func TestChangeEmail(t *testing.T) {
 			},
 			failed:        true,
 			expectedError: ddd.NewError("does not exist", ddd.StatusCodeNotFound),
-		},
-		{
-			name:          "missing email validation",
-			command:       &command_model.ChangeEmailCommand{NewEmail: "", UserID: userID},
-			getUserById:   nil,
-			failed:        true,
-			expectedError: ddd.NewError("email", ddd.StatusCodeBadRequest),
-		},
-		{
-			name:          "missing command_model.User validation",
-			command:       &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: ""},
-			getUserById:   nil,
-			failed:        true,
-			expectedError: ddd.NewError("userID", ddd.StatusCodeBadRequest),
+			rollback: func(ctx context.Context) error {
+				return errors.New(rollbackErrorMessage)
+			},
+			rollbackFailureMessage: rollbackErrorMessage,
 		},
 	}
 
@@ -171,6 +196,9 @@ func TestChangeEmail(t *testing.T) {
 			setupRepository(fb, aUser)
 			if d.getUserById != nil {
 				fb.Repository.getUserById = d.getUserById
+			}
+			if d.rollback != nil {
+				fb.Repository.rollback = d.rollback
 			}
 			setupEmailChangedEventHandler(fb)
 			setupEmailChangedHandledEventHandler(fb)
@@ -221,35 +249,65 @@ func TestHandlerReceivedCommandOfWrongType(t *testing.T) {
 }
 
 func TestHandleEventFailure(t *testing.T) {
-	fb := newFakeBootstrapper()
-	const userID = "1"
-	const originalEmail = "kamel.amit@thaabet.sy"
-	const newEmail = "eli.cohen@mossad.gov.il"
-	aUser := &command_model.User{}
-	aUser.SetEmail(originalEmail)
-	aUser.SetID(userID)
-	setupRepository(fb, aUser)
-	setupEmailChangedEventHandler(fb)
-	setupEmailChangedHandledEventHandler(fb)
-	fb.EmailChangedEventHandler.handle = func(ctx context.Context, event ddd.Event) error {
-		return errors.New("the spy that did not come home")
-	}
-	command := &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID}
+	const rollbackFailureMessage = "something terrible has happened"
 
-	_, err := fb.b.HandleCommand(context.Background(), command)
-
-	if err == nil {
-		t.Error("want error, got nil")
+	data := []struct {
+		name     string
+		rollback func(ctx context.Context) error
+	}{
+		{
+			name:     "regular failure",
+			rollback: nil,
+		},
+		{
+			name: "rollback failure",
+			rollback: func(ctx context.Context) error {
+				return errors.New(rollbackFailureMessage)
+			},
+		},
 	}
 
-	if fb.EmailChangedEventHandler.commitCalled == true {
-		t.Error("want email changed event handler to not be committed")
-	}
-	if fb.EmailChangedEventHandler.rollbackCalled != true {
-		t.Error("want email changed event handler to be rolled back")
-	}
-	if fb.MossadEmailCreatedEventHandler.commitCalled == true {
-		t.Error("want mossad email created event handler to not be called")
+	for _, d := range data {
+		t.Run(d.name, func(t *testing.T) {
+			fb := newFakeBootstrapper()
+			const userID = "1"
+			const originalEmail = "kamel.amit@thaabet.sy"
+			const newEmail = "eli.cohen@mossad.gov.il"
+			aUser := &command_model.User{}
+			aUser.SetEmail(originalEmail)
+			aUser.SetID(userID)
+			setupRepository(fb, aUser)
+			setupEmailChangedEventHandler(fb)
+			setupEmailChangedHandledEventHandler(fb)
+			if d.rollback != nil {
+				fb.Repository.rollback = d.rollback
+			}
+			fb.EmailChangedEventHandler.handle = func(ctx context.Context, event ddd.Event) error {
+				return errors.New("the spy that did not come home")
+			}
+			command := &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID}
+
+			_, err := fb.b.HandleCommand(context.Background(), command)
+
+			if err == nil {
+				t.Error("want error, got nil")
+			}
+
+			if fb.EmailChangedEventHandler.commitCalled == true {
+				t.Error("want email changed event handler to not be committed")
+			}
+			if fb.EmailChangedEventHandler.rollbackCalled != true {
+				t.Error("want email changed event handler to be rolled back")
+			}
+			if fb.MossadEmailCreatedEventHandler.commitCalled == true {
+				t.Error("want mossad email created event handler to not be called")
+			}
+			if d.rollback != nil {
+				if !strings.Contains(err.Error(), rollbackFailureMessage) {
+					t.Errorf("want rollback error %q, got %q", rollbackFailureMessage, err.Error())
+				}
+			}
+		})
 	}
 }
 
@@ -288,11 +346,13 @@ func assertSuccess(t *testing.T, err error, result any, fb *fakeBootstrapper, ne
 }
 
 func assertFailure(t *testing.T, err error, d struct {
-	name          string
-	command       *command_model.ChangeEmailCommand
-	getUserById   func(ctx context.Context, id string) (*command_model.User, error)
-	failed        bool
-	expectedError *ddd.Error
+	name                   string
+	command                *command_model.ChangeEmailCommand
+	getUserById            func(ctx context.Context, id string) (*command_model.User, error)
+	failed                 bool
+	expectedError          *ddd.Error
+	rollback               func(ctx context.Context) error
+	rollbackFailureMessage string
 }, fb *fakeBootstrapper) {
 	dddError, ok := err.(*ddd.Error)
 	if ok == true {
@@ -303,12 +363,21 @@ func assertFailure(t *testing.T, err error, d struct {
 			t.Errorf("want %q in dddError, got %q", d.expectedError.Error(), dddError.Error())
 		}
 	} else {
-		t.Errorf("want err %T, got %T", d.expectedError, dddError)
+		if d.rollback == nil {
+			t.Errorf("want err %T, got %T", d.expectedError, dddError)
+		} else {
+			if !strings.Contains(err.Error(), d.rollbackFailureMessage) {
+				t.Errorf("want rollback error %q, got %q", d.rollbackFailureMessage, err.Error())
+			}
+		}
+
 	}
 
 	if d.expectedError.StatusCode() != ddd.StatusCodeBadRequest {
-		if fb.Repository.rollbackCalled != true {
-			t.Errorf("expected adapters.Repository rollbackCalled to be true, got false")
+		if d.rollback == nil {
+			if fb.Repository.rollbackCalled != true {
+				t.Errorf("expected adapters.Repository rollbackCalled to be true, got false")
+			}
 		}
 	}
 }
@@ -338,11 +407,11 @@ func setupEmailChangedEventHandler(fb *fakeBootstrapper) {
 	}
 	fb.EmailChangedEventHandler.rollback = func(ctx context.Context) error {
 		fb.EmailChangedEventHandler.rollbackCalled = true
-		return nil
+		return fb.Repository.Rollback(ctx)
 	}
 	fb.EmailChangedEventHandler.commit = func(ctx context.Context) error {
 		fb.EmailChangedEventHandler.commitCalled = true
-		return nil
+		return fb.Repository.Commit(ctx)
 	}
 	fb.EmailChangedEventHandler.events = func() []ddd.Event {
 		// eventWithoutHandler should be ignored silently

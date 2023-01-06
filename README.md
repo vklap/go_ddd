@@ -46,12 +46,12 @@ Imagine a simple background job for changing a user's email :email: that consist
 1. Main Flow: changing and persisting the new email, that triggers
 2. A Sub Flow: request to send an email notification to the relevant user
 
-The separation of the main and sub flow provide loose coupling that allows the main flow to focus on its 
+The separation of the main and sub flow provides loose coupling that allows the main flow to focus on its 
 responsibility, and not be cluttered with code related to what is called side effects.  
 This comes especially handy, as side effects tend to pile up - which when handled within the main flow, 
 would make the main flow's code much harder to follow and maintain. 
-Moreover, managing these side effects within sub flows, are a perfect fit for Event-Driven architecture - as each
-such flow will trigger another event that should be handled by another module/microservice.
+Moreover, managing these side effects within sub flows, are a perfect fit for Event-Driven architectures - as each
+such sub flow will trigger events that should be handled by other modules/microservices.
 
 Applying DDD in the code consists of the following steps:
 - **Step 1**: `Domain Modeling` of the `Commands`, `Events`, and `Entities`

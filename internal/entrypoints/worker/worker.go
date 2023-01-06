@@ -10,8 +10,21 @@ import (
 
 // Start listens to the message broker and dispatches commands to be handled.
 func Start() {
-	pubSubClient := boostrapper.GetPubSubClientInstance()
-	messages, err := pubSubClient.GetMessages(context.Background())
+	// Setup InMemory fake data
+	bs := boostrapper.Instance
+	user := &command_model.User{}
+	user.SetEmail("kamel.amin@thaabet.sy")
+	user.SetID("1")
+	bs.Repository.UsersById[user.ID()] = user
+
+	fakePubSubMessage := &command_model.ChangeEmailCommand{
+		NewEmail: "eli.cohen@mossad.gov.il",
+		UserID:   "1",
+	}
+	bs.PubSubClient.Commands = append(bs.PubSubClient.Commands, fakePubSubMessage)
+
+	// Start listening for messages from fake in memory PubSub
+	messages, err := bs.PubSubClient.GetChangeEmailMessages(context.Background())
 	if err != nil {
 		panic(err)
 	}

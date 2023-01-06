@@ -36,7 +36,7 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 
 	// Delegate updating the email to the user, which is a Domain Entity.
 	// The SetEmail method is responsible to detect if the email was changed,
-	// and if so, then it will record an EmailChangedEvent.
+	// and if so, then it will record an NotifySlackEvent.
 	user.SetEmail(changeEmailCommand.NewEmail)
 
 	// Delegate storing data to the repository.

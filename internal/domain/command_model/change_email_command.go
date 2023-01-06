@@ -11,10 +11,10 @@ type ChangeEmailCommand struct {
 
 func (c *ChangeEmailCommand) IsValid() error {
 	if c.UserID == "" {
-		return ddd.NewError("userID cannot be empty", ddd.StatusCodeBadRequest)
+		return ddd.NewError("user ID cannot be empty", ddd.StatusCodeBadRequest)
 	}
 	if c.NewEmail == "" {
-		return ddd.NewError("email cannot be empty", ddd.StatusCodeBadRequest)
+		return ddd.NewError("new email cannot be empty", ddd.StatusCodeBadRequest)
 	}
 	return nil
 }

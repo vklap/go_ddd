@@ -41,10 +41,17 @@ The below explanations are based on this sample implementation.
 
 ## Sample Implementation
 
-Imagine a simple background job for changing a user's email :email: that consists of:
+Imagine a simple background job for changing a user's email :email: that consists of 2 sub flows:
 
-1. The main flow: modify the user's email, and persist it in the database.
-2. A side effect flow: send the user a notification email about the above modification.
+1. Main Flow: changing and persisting the new email, that triggers
+2. A Sub Flow: request to send an email notification to the relevant user
+
+The separation of the main and sub flow provide loose coupling that allows the main flow to focus on its 
+responsibility, and not be cluttered with code related to what is called side effects.  
+This comes especially handy, as side effects tend to pile up - which when handled within the main flow, 
+would make the main flow's code much harder to follow and maintain. 
+Moreover, managing these side effects within sub flows, are a perfect fit for Event-Driven architecture - as each
+such flow will trigger another event that should be handled by another module/microservice.
 
 Applying DDD in the code consists of the following steps:
 - **Step 1**: `Domain Modeling` of the `Commands`, `Events`, and `Entities`
@@ -150,7 +157,6 @@ The `Adapters Layer` is responsible for communicating with external resources on
 and should not contain any business logic.
 
 - [Repository](https://github.com/vklap/go_ddd/blob/main/internal/adapters/repository.go)
-- [EmailClient](https://github.com/vklap/go_ddd/blob/main/internal/adapters/email_client.go)
 - [PubSubClient](https://github.com/vklap/go_ddd/blob/main/internal/adapters/pubsub_client.go)
 
 #### Repository
@@ -160,20 +166,11 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
-
-// usersById is used solely for demo purposes, to support the InMemoryRepository
-var usersById = make(map[string]*command_model.User)
-
-func init() {
-	user := &command_model.User{}
-	user.SetID("1")
-	user.SetEmail("kamel.amit@thaabet")
-	usersById[user.ID()] = user
-}
 
 type Repository interface {
 	GetUserById(ctx context.Context, id string) (*command_model.User, error)
@@ -183,10 +180,21 @@ type Repository interface {
 
 // InMemoryRepository is used for demo purposes.
 // In the real world it might be a MongoDBRepository, PostgresqlRepository, etc.
-type InMemoryRepository struct{}
+type InMemoryRepository struct {
+	CommitCalled       bool
+	CommitShouldFail   bool
+	RollbackCalled     bool
+	RollbackShouldFail bool
+	UsersById          map[string]*command_model.User
+	savedUsers         []*command_model.User
+}
+
+func NewInMemoryRepository() *InMemoryRepository {
+	return &InMemoryRepository{UsersById: make(map[string]*command_model.User)}
+}
 
 func (r *InMemoryRepository) GetUserById(ctx context.Context, id string) (*command_model.User, error) {
-	user, ok := usersById[id]
+	user, ok := r.UsersById[id]
 	if ok == false {
 		return nil, ddd.NewError(fmt.Sprintf("user with id %q does not exist", id), ddd.StatusCodeNotFound)
 	}
@@ -194,15 +202,27 @@ func (r *InMemoryRepository) GetUserById(ctx context.Context, id string) (*comma
 }
 
 func (r *InMemoryRepository) SaveUser(ctx context.Context, user *command_model.User) error {
-	usersById[user.ID()] = user
+	r.savedUsers = append(r.savedUsers, user)
 	return nil
 }
 
 func (r *InMemoryRepository) Commit(ctx context.Context) error {
+	r.CommitCalled = true
+	if r.CommitShouldFail {
+		return errors.New("commit failed")
+	}
+	for _, user := range r.savedUsers {
+		r.UsersById[user.ID()] = user
+	}
 	return nil
 }
 
 func (r *InMemoryRepository) Rollback(ctx context.Context) error {
+	r.RollbackCalled = true
+	if r.RollbackShouldFail {
+		return errors.New("rollback failed")
+	}
+	r.savedUsers = make([]*command_model.User, 0)
 	return nil
 }
 
@@ -237,31 +257,99 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
+	"github.com/vklap/go_ddd/pkg/ddd"
+	"log"
 )
 
 type PubSubClient interface {
-	GetMessages(ctx context.Context) (chan []byte, error)
+	GetChangeEmailMessages(ctx context.Context) (chan []byte, error)
+	NotifyEmailChanged(ctx context.Context, userId string, newEmail string, oldEmail string) error
+	NotifySlack(ctx context.Context, message string) error
+	ddd.RollbackCommitter
 }
 
 // InMemoryPubSubClient is used for demo purposes.
-type InMemoryPubSubClient struct{}
+type InMemoryPubSubClient struct {
+	Commands                     []*command_model.ChangeEmailCommand
+	CommitCalled                 bool
+	CommitShouldFail             bool
+	MailSent                     bool
+	NotifyEmailChangedCalled     bool
+	NotifyEmailChangedFailed     bool
+	NotifyEmailChangedNewEmail   string
+	NotifyEmailChangedOldEmail   string
+	NotifyEmailChangedShouldFail bool
+	NotifyEmailChangedUserId     string
+	NotifySlackCalled            bool
+	NotifySlackMessage           string
+	RollbackCalled               bool
+	RollbackShouldFail           bool
+	SlackMessageSent             bool
+}
 
-func (c *InMemoryPubSubClient) GetMessages(ctx context.Context) (chan []byte, error) {
+func NewInMemoryPubSubClient() *InMemoryPubSubClient {
+	return &InMemoryPubSubClient{Commands: make([]*command_model.ChangeEmailCommand, 0)}
+}
+
+func (c *InMemoryPubSubClient) GetChangeEmailMessages(ctx context.Context) (chan []byte, error) {
 	messages := make(chan []byte)
 	go func() {
-		for {
-			command := &command_model.ChangeEmailCommand{UserID: "1", NewEmail: "eli.cohen@mossad.gov.il"}
+		for _, command := range c.Commands {
 			data, err := json.Marshal(command)
 			if err != nil {
 				panic(err)
 			}
 			messages <- data
-			close(messages)
-			break
 		}
+		close(messages)
 	}()
 	return messages, nil
+}
+
+func (c *InMemoryPubSubClient) NotifyEmailChanged(ctx context.Context, userId string, newEmail, oldEmail string) error {
+	if c.NotifyEmailChangedFailed {
+		return errors.New("notify email changed failed")
+	}
+	c.NotifyEmailChangedCalled = true
+	if c.NotifyEmailChangedShouldFail {
+		return errors.New("notify email changed has failed")
+	}
+	c.NotifyEmailChangedNewEmail = newEmail
+	c.NotifyEmailChangedOldEmail = oldEmail
+	c.NotifyEmailChangedUserId = userId
+	log.Printf("requested to send EmailChanged notification: userID=%q, oldEmail=%q, newEmail=%q", userId, oldEmail, newEmail)
+	return nil
+}
+
+func (c *InMemoryPubSubClient) NotifySlack(ctx context.Context, message string) error {
+	c.NotifySlackCalled = true
+	c.NotifySlackMessage = message
+	log.Printf("requested to send Slack message: %q", message)
+	return nil
+}
+
+func (c *InMemoryPubSubClient) Commit(ctx context.Context) error {
+	c.CommitCalled = true
+	if c.CommitShouldFail {
+		return errors.New("commit failed")
+	}
+	if c.NotifyEmailChangedCalled {
+		c.MailSent = true
+	}
+	if c.NotifySlackCalled {
+		c.SlackMessageSent = true
+	}
+	return nil
+}
+
+func (c *InMemoryPubSubClient) Rollback(ctx context.Context) error {
+	c.RollbackCalled = true
+	if c.RollbackShouldFail {
+		return errors.New("rollback failed")
+	}
+	return nil
 }
 
 var _ PubSubClient = (*InMemoryPubSubClient)(nil)
@@ -308,7 +396,7 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 	if ok == false {
 		return nil, fmt.Errorf("ChangeEmailCommandHandler expects a command of type %T", changeEmailCommand)
 	}
-	
+
 	// No need to call changeEmailCommand.IsValid() - as it's being called by the framework.
 
 	// Delegate fetching data to the repository, which belongs to the Adapters Layer.
@@ -319,7 +407,7 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 
 	// Delegate updating the email to the user, which is a Domain Entity.
 	// The SetEmail method is responsible to detect if the email was changed,
-	// and if so, then it will record an EmailChangedEvent. 
+	// and if so, then it will record an NotifySlackEvent.
 	user.SetEmail(changeEmailCommand.NewEmail)
 
 	// Delegate storing data to the repository.
@@ -328,7 +416,7 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 	}
 
 	// This is where Domain events are being registered,
-	// so they can eventually be dispatched to event handlers (if they exist). 
+	// so they can eventually be dispatched to event handlers (if they exist).
 	// In our use case the events will be dispatched to the EmailChangedEventHandler.
 	h.events = append(h.events, user.Events()...)
 
@@ -349,7 +437,7 @@ func (h *ChangeEmailCommandHandler) Rollback(ctx context.Context) error {
 	return h.repository.Rollback(ctx)
 }
 
-// Events reports about events. 
+// Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
 // This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *ChangeEmailCommandHandler) Events() []ddd.Event {
@@ -374,46 +462,47 @@ import (
 
 // EmailChangedEventHandler implements ddd.EventHandler.
 type EmailChangedEventHandler struct {
-	emailClient adapters.EmailClient
+	pubSubClient adapters.PubSubClient
+	events       []ddd.Event
 }
 
 // NewEmailChangedEventHandler is a constructor function to be used by the Bootstrapper.
-func NewEmailChangedEventHandler(emailClient adapters.EmailClient) *EmailChangedEventHandler {
-	return &EmailChangedEventHandler{emailClient: emailClient}
+func NewEmailChangedEventHandler(pubSubClient adapters.PubSubClient) *EmailChangedEventHandler {
+	return &EmailChangedEventHandler{pubSubClient: pubSubClient, events: make([]ddd.Event, 0)}
 }
 
 // Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
 func (h *EmailChangedEventHandler) Handle(ctx context.Context, event ddd.Event) error {
-	emailChangedEvent, ok := event.(*command_model.EmailChangedEvent)
+	e, ok := event.(*command_model.EmailChangedEvent)
 	if ok == false {
-		panic(fmt.Sprintf("failed to handle email changed: want %T, got %T", &command_model.EmailChangedEvent{}, emailChangedEvent))
+		panic(fmt.Sprintf("failed to handle email changed: want %T, got %T", &command_model.NotifySlackEvent{}, e))
 	}
-	from := "noreply@example.com"
-	to := emailChangedEvent.OriginalEmail
-	title := "NewEmail Changed Notification"
-	message := fmt.Sprintf("Your email was changed to %v", emailChangedEvent.NewEmail)
-	return h.emailClient.SendEmail(from, to, title, message)
+	if err := h.pubSubClient.NotifyEmailChanged(ctx, e.UserID, e.NewEmail, e.OriginalEmail); err != nil {
+		return err
+	}
+	h.events = append(h.events, &command_model.NotifySlackEvent{Message: "Email Notification sent for EmailChanged event"})
+	return nil
 }
 
 // Commit is responsible for committing the changes performed by the Handle method, such as
 // committing a database transaction managed by the repository.
 // This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *EmailChangedEventHandler) Commit(ctx context.Context) error {
-	return nil
+	return h.pubSubClient.Commit(ctx)
 }
 
 // Rollback is responsible to rollback changes performed by the Handle method, such as
 // rollback a database transaction managed by the repository.
 // This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *EmailChangedEventHandler) Rollback(ctx context.Context) error {
-	return nil
+	return h.pubSubClient.Rollback(ctx)
 }
 
 // Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
 // This method is being called by the framework, so it should not be called from within the Handle method.
 func (h *EmailChangedEventHandler) Events() []ddd.Event {
-	return nil
+	return h.events
 }
 
 var _ ddd.EventHandler = (*EmailChangedEventHandler)(nil)
@@ -437,30 +526,41 @@ import (
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-var b *ddd.Bootstrapper
-var pubSubClient adapters.PubSubClient
+var Instance *DemoBootstrapper
 
-// init creates the bootstrapper instance and registers the command and event handlers.
+// init creates the Bootstrapper instance and registers the command and event handlers.
 func init() {
-	b = ddd.NewBootstrapper()
-	b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
-		return command_handlers.NewChangeEmailCommandHandler(&adapters.InMemoryRepository{}), nil
-	})
-	b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
-		return event_handlers.NewEmailChangedEventHandler(&adapters.InMemoryEmailClient{}), nil
-	})
-	pubSubClient = &adapters.InMemoryPubSubClient{}
+	Instance = New()
 }
 
-// GetPubSubClientInstance returns an instance of the pubSubClient
-func GetPubSubClientInstance() adapters.PubSubClient {
-	return pubSubClient
+type DemoBootstrapper struct {
+	PubSubClient *adapters.InMemoryPubSubClient
+	Repository   *adapters.InMemoryRepository
+	Bootstrapper *ddd.Bootstrapper
+}
+
+func New() *DemoBootstrapper {
+	bs := &DemoBootstrapper{
+		PubSubClient: adapters.NewInMemoryPubSubClient(),
+		Repository:   adapters.NewInMemoryRepository(),
+		Bootstrapper: ddd.NewBootstrapper(),
+	}
+	bs.Bootstrapper.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
+		return command_handlers.NewChangeEmailCommandHandler(bs.Repository), nil
+	})
+	bs.Bootstrapper.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
+		return event_handlers.NewEmailChangedEventHandler(bs.PubSubClient), nil
+	})
+	bs.Bootstrapper.RegisterEventHandlerFactory(&command_model.NotifySlackEvent{}, func() (ddd.EventHandler, error) {
+		return event_handlers.NewNotifySlackEventHandler(bs.PubSubClient), nil
+	})
+	return bs
 }
 
 // HandleCommand encapsulates the Bootstrapper HandleCommand, and gives a strongly typed interface
 // provided by go's generics.
 func HandleCommand[Command ddd.Command](ctx context.Context, command Command) (any, error) {
-	return b.HandleCommand(ctx, command)
+	return Instance.Bootstrapper.HandleCommand(ctx, command)
 }
 ```
 
@@ -481,8 +581,21 @@ import (
 
 // Start listens to the message broker and dispatches commands to be handled.
 func Start() {
-	pubSubClient := boostrapper.GetPubSubClientInstance()
-	messages, err := pubSubClient.GetMessages(context.Background())
+	// Setup InMemory fake data
+	bs := boostrapper.Instance
+	user := &command_model.User{}
+	user.SetEmail("kamel.amin@thaabet.sy")
+	user.SetID("1")
+	bs.Repository.UsersById[user.ID()] = user
+
+	fakePubSubMessage := &command_model.ChangeEmailCommand{
+		NewEmail: "eli.cohen@mossad.gov.il",
+		UserID:   "1",
+	}
+	bs.PubSubClient.Commands = append(bs.PubSubClient.Commands, fakePubSubMessage)
+
+	// Start listening for messages from fake in memory PubSub
+	messages, err := bs.PubSubClient.GetChangeEmailMessages(context.Background())
 	if err != nil {
 		panic(err)
 	}

@@ -9,28 +9,39 @@ import (
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-var b *ddd.Bootstrapper
-var pubSubClient adapters.PubSubClient
+var Instance *DemoBootstrapper
 
-// init creates the bootstrapper instance and registers the command and event handlers.
+// init creates the Bootstrapper instance and registers the command and event handlers.
 func init() {
-	b = ddd.NewBootstrapper()
-	b.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
-		return command_handlers.NewChangeEmailCommandHandler(&adapters.InMemoryRepository{}), nil
-	})
-	b.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
-		return event_handlers.NewEmailChangedEventHandler(&adapters.InMemoryEmailClient{}), nil
-	})
-	pubSubClient = &adapters.InMemoryPubSubClient{}
+	Instance = New()
 }
 
-// GetPubSubClientInstance returns an instance of the pubSubClient
-func GetPubSubClientInstance() adapters.PubSubClient {
-	return pubSubClient
+type DemoBootstrapper struct {
+	PubSubClient *adapters.InMemoryPubSubClient
+	Repository   *adapters.InMemoryRepository
+	Bootstrapper *ddd.Bootstrapper
+}
+
+func New() *DemoBootstrapper {
+	bs := &DemoBootstrapper{
+		PubSubClient: adapters.NewInMemoryPubSubClient(),
+		Repository:   adapters.NewInMemoryRepository(),
+		Bootstrapper: ddd.NewBootstrapper(),
+	}
+	bs.Bootstrapper.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
+		return command_handlers.NewChangeEmailCommandHandler(bs.Repository), nil
+	})
+	bs.Bootstrapper.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
+		return event_handlers.NewEmailChangedEventHandler(bs.PubSubClient), nil
+	})
+	bs.Bootstrapper.RegisterEventHandlerFactory(&command_model.NotifySlackEvent{}, func() (ddd.EventHandler, error) {
+		return event_handlers.NewNotifySlackEventHandler(bs.PubSubClient), nil
+	})
+	return bs
 }
 
 // HandleCommand encapsulates the Bootstrapper HandleCommand, and gives a strongly typed interface
 // provided by go's generics.
 func HandleCommand[Command ddd.Command](ctx context.Context, command Command) (any, error) {
-	return b.HandleCommand(ctx, command)
+	return Instance.Bootstrapper.HandleCommand(ctx, command)
 }

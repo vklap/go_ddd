@@ -10,14 +10,11 @@ type commandUnitOfWork struct {
 }
 
 func (uow *commandUnitOfWork) HandleCommand(ctx context.Context, command Command) (result any, err error) {
-	if err = command.IsValid(); err != nil {
-		return result, err
-	}
 	result, err = uow.handler.Handle(ctx, command)
 	if err != nil {
 		rollbackErr := uow.handler.Rollback(ctx)
 		if rollbackErr != nil {
-			return nil, fmt.Errorf("rollback failed with %v after getting %v", rollbackErr, err)
+			return nil, fmt.Errorf("rollback failed with %q after getting %q", rollbackErr, err)
 		}
 		return result, err
 	}

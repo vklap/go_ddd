@@ -3,7 +3,6 @@ package command_model
 import "github.com/vklap/go_ddd/pkg/ddd"
 
 // EmailChangedEvent contains the data required to notify about the email modification.
-// Besides this, it also represents a side effect flow that should be implemented.
 type EmailChangedEvent struct {
 	UserID        string
 	OriginalEmail string

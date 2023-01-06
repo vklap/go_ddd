@@ -17,27 +17,27 @@ func Start() {
 	user.SetID("1")
 	bs.Repository.UsersById[user.ID()] = user
 
-	fakePubSubMessage := &command_model.ChangeEmailCommand{
-		NewEmail: "eli.cohen@mossad.gov.il",
-		UserID:   "1",
+	fakePubSubMessage := &command_model.SaveUserCommand{
+		Email:  "eli.cohen@mossad.gov.il",
+		UserID: "1",
 	}
 	bs.PubSubClient.Commands = append(bs.PubSubClient.Commands, fakePubSubMessage)
 
 	// Start listening for messages from fake in memory PubSub
-	messages, err := bs.PubSubClient.GetChangeEmailMessages(context.Background())
+	messages, err := bs.PubSubClient.GetSaveUserMessages(context.Background())
 	if err != nil {
 		panic(err)
 	}
 	for message := range messages {
-		var command command_model.ChangeEmailCommand
+		var command command_model.SaveUserCommand
 		err = json.Unmarshal(message, &command)
 		if err != nil {
-			log.Printf("failed to unmarshal ChangeEmailCommand: %v (message: %v)", err, message)
+			log.Printf("failed to unmarshal SaveUserCommand: %v (message: %v)", err, message)
 			continue
 		}
-		_, err = boostrapper.HandleCommand[*command_model.ChangeEmailCommand](context.Background(), &command)
+		_, err = boostrapper.HandleCommand[*command_model.SaveUserCommand](context.Background(), &command)
 		if err != nil {
-			log.Printf("handle ChangeEmailCommand failed: %v", err)
+			log.Printf("handle SaveUserCommand failed: %v", err)
 		}
 	}
 }

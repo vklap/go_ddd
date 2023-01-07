@@ -7,10 +7,10 @@ This is a lightweight framework that provides a quick and simple setup for
 that are a pleasure to maintain and easy to unit test.
 
 These are the main features that are supported by the framework:
-1. `Unit of Work` with a `commit` and `rollback` mechanism for application layer handlers
-2. Definition of `Domain Commands` in the domain layer and their `Command Handlers` in the application layer
-3. Definition of `Domain Events` in the domain layer and their `Event Handlers` in the application layer
-4. `Event-Driven Architecture` based on `Domain Events`
+1. **Unit of Work** with a **commit** and **rollback** mechanism for application layer handlers
+2. Definition of **Domain Commands** in the domain layer and their **Command Handlers** in the application layer
+3. Definition of **Domain Events** in the domain layer and their **Event Handlers** in the application layer
+4. **Event-Driven Architecture** based on **Domain Events**
 
 This library has no external dependencies :beers: and hence should be easy to add to any project that can benefit from 
 DDD.
@@ -38,21 +38,21 @@ func main() {
 A sample implementation is provided within the [cmd](https://github.com/vklap/go_ddd/tree/main/cmd/worker) 
 and [internal](https://github.com/vklap/go_ddd/tree/main/internal) folders of the source code.
 
-The below explanation are based on this sample implementation.
+The below explanation is based on this sample implementation.
 
 ## Sample Implementation
 
 Let's imagine a simplified background job for saving a user's details that consists 
 of the following steps within a unit of work:
 
-1. Get the new user's data from a `PubSub message broker` (such as Amazon SQS, RabbitMQ, etc.) 
-   and transform it into a `command` object that can be handled by the `application layer`
-2. Perform basic validations on the `command`'s data
-3. Get the existing `user entity` data from the database, via a `repository`
-4. Update the `user entity` with the data stored in the `command` object
-5. `Save` the updated user entity `in the repository`
-6. Either `commit` (and store the new data in the database) 
-   or `rollback` (and thus discard the changes recorded in the previous steps)
+1. Get the new user's data from a **PubSub message broker** (such as Amazon SQS, RabbitMQ, etc.) 
+   and transform it into a **command** object that can be handled by the **application layer**
+2. Perform basic validations on the **command**'s data
+3. Get the existing **user entity** data from the database, via a **repository**
+4. Update the **user entity** with the data stored in the **command** object
+5. **Save** the updated user entity **in the repository**
+6. Either **commit** (and store the new data in the database) 
+   or **rollback** (and thus discard the changes recorded in the previous steps)
 
 Steps 2 (command validation) and 6 (commit or rollback) are triggered by the framework.
 
@@ -122,7 +122,8 @@ var _ ddd.Command = (*SaveUserCommand)(nil)
 
 ##### Repository
 
-Please note that we're using a in memory repository for demo purposes (and also for the unit tests)
+Please note that we're using an in memory repository for demo purposes 
+(and also for the [unit tests](https://github.com/vklap/go_ddd/blob/main/pkg/ddd/bootstrapper_test.go))
 
 ```go
 package adapters
@@ -337,56 +338,58 @@ bootstrapper.Instance.HandleCommand(context.Background(), &command)
 
 ### But wait, isn't this code over-engineered?
 
-Basically, if this all the code should do, then this code is arguably too complex.
-Yet, what happens when you need to handle other tasks as a result of the above flow, such as:
+Basically, if this is all the code should do, then this code is arguably too complex.
+Yet, what happens when the requirements grow, and you need to handle other tasks, such as:
 1. Trigger a verification email to validate the provided email?
 2. Notify a KPI Service about the changes - for further analysis
-3. Handle other changes, as in a real world scenario, the user entity should have much more properties - 
-   where each property change might require triggering other actions (a.k.a. events)
+3. Handle other changes, as in a real world scenario the user entity should have much more properties - 
+   where each property change might require triggering other actions (a.k.a. `Domain Events`)
 
 The code might quickly look like this:
 ```go
+
 func (h *SaveUserCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
-	saveUserCommand, ok := command.(*command_model.SaveUserCommand)
-	if ok == false {
-		return nil, fmt.Errorf("SaveUserCommandHandler expects a command of type %T", saveUserCommand)
-	}
+    saveUserCommand, ok := command.(*command_model.SaveUserCommand)
+    if ok == false {
+        return nil, fmt.Errorf("SaveUserCommandHandler expects a command of type %T", saveUserCommand)
+    }
 
 	user, err := h.repository.GetUserById(ctx, saveUserCommand.UserID)
-	if err != nil {
-		return nil, err
-	}
+    if err != nil {
+        return nil, err
+    }
 
-	user.SetEmail(saveUserCommand.Email)
+    user.SetEmail(saveUserCommand.Email)
     if err = h.repository.SaveUser(ctx, user); err != nil {
         return nil, err
     }
-	
-	// Side effects...
+
+    // Side effects...
     if user.EmailChanged() {
-	    if err := h.PubSub.requestEmailVerification(user); err != nil {
-		    ...	
-        }   
         if err := h.PubSub.requestEmailVerification(user); err != nil {
-		    ...	
+            ...
+        }
+        if err := h.PubSub.requestEmailVerification(user); err != nil {
+            ...
         }       
     }
 
     // Side effects...
-	user.SetPhoneNumber(...)	
-	if user.PhoneChanged() {
-		if err := h.PubSub.requestPhoneVerification(user); err != nil {
+    user.SetPhoneNumber(...)
+    if user.PhoneChanged() {
+        if err := h.PubSub.requestPhoneVerification(user); err != nil {
             ...
-		}
-		if err := h.PubSub.requestPhoneVerification(user); err != nil {
+        }
+        if err := h.PubSub.requestPhoneVerification(user); err != nil {
             ...
-		}       
-	}
-	
-	...
-	
-	return nil, nil
+        }       
+    }
+
+    ...
+
+    return nil, nil
 }
+
 ```
 
 The above code will contain lots side effects, and will defeat the SRP (Single Responsibility Principle) 
@@ -394,13 +397,9 @@ for which it was created - which is to save the new user details.
 Even worse, it will sooner than later become spaghetti code - that will be a nightmare to maintain and unit test. 
 
 ### Event-Driven Architecture with EventHandlers to the Rescue
-All the above side effects should best be extracted out of the above code, 
-and handled within other handlers by the framework. 
+All the above side effects should best be extracted out of the above code, and handled within other handlers. 
 These handlers will be handled in the same way as the command handler, 
 i.e. within units of work of their own - and may trigger other events which will be handled by the framework.
-
-However, please note that these events will be triggered by the framework - 
-and **not** by calling the bootstrapper's `HandleCommand` method.
 
 Here are 2 sample event handlers:
 
@@ -519,6 +518,20 @@ func (h *KPIEventHandler) Events() []ddd.Event {
 var _ ddd.EventHandler = (*KPIEventHandler)(nil)
 
 ```
+
+### Advantages of applying the above-mentioned Domain-Driven Design Tactical Patterns
+
+- A clear separation of concerns between the business rules (which reside solely inside the domain layer), 
+  the application flows (which reside in the service layer) and the IO related operations - 
+  such as communication with databases/web services/file system (which reside in the adapters layer)
+
+- This separation of concerns make this kind of code very suitable for unit & integration tests - 
+  the service & domain layers can be fully unit tested and the adapter layer can easily 
+  be integration tested (without being concerned with any business logic leaking from the other layers - 
+  so that the integration tests can remain simple)
+  
+- A common code base structure makes it much easier for other developers, 
+  who are aware of this structure, to get into the code.
 
 ## Links
 

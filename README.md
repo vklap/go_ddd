@@ -15,6 +15,14 @@ These are the main features that are supported by the framework:
 This library has no external dependencies :beers: and hence should be easy to add to any project that can benefit from 
 DDD.
 
+Many concepts used in this framework are based on the author's own experience and greatly inspired by amazing DDD books,
+such as:
+
+* [Domain-Driven Design: Tackling Complexity in the Heart of Software](https://www.oreilly.com/library/view/domain-driven-design-tackling/0321125215/)
+* [Architecture Patterns with Python](https://www.oreilly.com/library/view/architecture-patterns-with/9781492052197/)
+* [Event-Driven Architecture in Golang](https://www.packtpub.com/product/event-driven-architecture-in-golang/9781803238012)
+
+
 ## Installation
 
 ```shell

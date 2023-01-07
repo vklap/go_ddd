@@ -2,22 +2,23 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/vklap/ddd.svg)](https://pkg.go.dev/github.com/vklap/go_ddd)
 
 ## What is this library good for?
-This is a lightweight framework that provides a quick setup for
-[Domain-Driven](https://en.wikipedia.org/wiki/Domain-driven_design) designed apps that
-are easy to unit test - and is based on battle tested DDD Design Patterns, such as:
+This is a lightweight framework that provides a quick and simple setup for
+[Domain-Driven](https://en.wikipedia.org/wiki/Domain-driven_design) designed apps
+that are a pleasure to maintain and easy to unit test.
 
-1. `Domain Layer` entities with domain events for handling side effects (or even support Event-Driven Architectures) 
-2. `Application Service Layer` flow handlers that are being executed by units of work (to commit/rollback operations)
-3. `Infrastructure/Adapters Layer` to external resources (such as: database repositories, web service clients, etc.)
-4. `CQRS` (Command Query Responsibility Separation) with domain commands
+These are the main features that are supported by the framework:
+1. `Unit of Work` with a `commit` and `rollback` mechanism for application layer handlers
+2. Definition of `Domain Commands` in the domain layer and their `Command Handlers` in the application layer
+3. Definition of `Domain Events` in the domain layer and their `Event Handlers` in the application layer
+4. `Event-Driven Architecture` based on `Domain Events`
 
-
-This library has no external dependencies :beers:
+This library has no external dependencies :beers: and hence should be easy to add to any project that can benefit from 
+DDD.
 
 ## Installation
 
 ```shell
-go get -u github.com/vklap/go_ddd
+go get github.com/vklap/go_ddd
 ```
 
 ## Import
@@ -37,92 +38,30 @@ func main() {
 A sample implementation is provided within the [cmd](https://github.com/vklap/go_ddd/tree/main/cmd/worker) 
 and [internal](https://github.com/vklap/go_ddd/tree/main/internal) folders of the source code.
 
-The below explanations are based on this sample implementation.
+The below explanation are based on this sample implementation.
 
 ## Sample Implementation
 
-Imagine a simple background job for changing a user's email :email: that consists of 2 sub flows:
+Let's imagine a simplified background job for saving a user's details that consists 
+of the following steps within a unit of work:
 
-1. Main Flow: changing and persisting the new email, that triggers
-2. A Sub Flow: request to send an email notification to the relevant user
+1. Get the new user's data from a `PubSub message broker` (such as Amazon SQS, RabbitMQ, etc.) 
+   and transform it into a `command` object that can be handled by the `application layer`
+2. Perform basic validations on the `command`'s data
+3. Get the existing `user entity` data from the database, via a `repository`
+4. Update the `user entity` with the data stored in the `command` object
+5. `Save` the updated user entity `in the repository`
+6. Either `commit` (and store the new data in the database) 
+   or `rollback` (and thus discard the changes recorded in the previous steps)
 
-The separation of the main and sub flow provides loose coupling that allows the main flow to focus on its 
-responsibility, and not be cluttered with code related to what is called side effects.  
-This comes especially handy, as side effects tend to pile up - which when handled within the main flow, 
-would make the main flow's code much harder to follow and maintain. 
-Moreover, managing these side effects within sub flows, are a perfect fit for Event-Driven architectures - as each
-such sub flow will trigger events that should be handled by other modules/microservices.
+Steps 2 (command validation) and 6 (commit or rollback) are triggered by the framework.
 
-Applying DDD in the code consists of the following steps:
-- **Step 1**: `Domain Modeling` of the `Commands`, `Events`, and `Entities`
-- **Step 2**: Add the `Adapters` required by the `Service Layer`
-- **Step 3**: Implement the `Command` and `Event` handlers in the `Service Layer` for managing the applicative flows
-- **Step 4**: Create the `Bootrapper` that connects all the above pieces together
-- **Step 5**: Add an `Entrypoint` listener that receives messages from a message broker (such as RabbitMQ, Amazon SQS, etc.)
-- **Step 6**: Specify the golang `main` function  
+### How the code looks like?
 
-### Step 1: Domain Modeling
+#### Domain Layer
 
-The `Domain Layer` should contain only in memory business logic and business rules,
-and should not be aware of external dependencies, such as databases, web services, file system, etc.
+##### User Entity
 
-Let's first implement the [ChangeEmailCommand](https://github.com/vklap/go_ddd/blob/main/internal/domain/command_model/change_email_command.go) 
-and the [EmailChangedEvent](https://github.com/vklap/go_ddd/blob/main/internal/domain/command_model/email_changed_event.go):
-
-#### ChangeEmailCommand
-```go
-package command_model
-
-import "github.com/vklap/go_ddd/pkg/ddd"
-
-// ChangeEmailCommand contains the data required to change the user's email.
-// Besides this, it also represents a main flow.
-type ChangeEmailCommand struct {
-	UserID   string `json:"user_id"`
-	NewEmail string `json:"new_email"`
-}
-
-func (c *ChangeEmailCommand) IsValid() error {
-	if c.UserID == "" {
-		return ddd.NewError("userID cannot be empty", ddd.StatusCodeBadRequest)
-	}
-	if c.NewEmail == "" {
-		return ddd.NewError("email cannot be empty", ddd.StatusCodeBadRequest)
-	}
-	return nil
-}
-
-func (c *ChangeEmailCommand) CommandName() string {
-	return "ChangeEmailCommand"
-}
-
-// The below line ensures at compile time that ChangeEmailCommand adheres to the ddd.Command interface 
-var _ ddd.Command = (*ChangeEmailCommand)(nil)
-```
-
-#### EmailChangedEvent
-```go
-package command_model
-
-import "github.com/vklap/go_ddd/pkg/ddd"
-
-// EmailChangedEvent contains the data required to notify about the email modification.
-// Besides this, it also represents a side effect flow that should be implemented.
-type EmailChangedEvent struct {
-	UserID        string
-	OriginalEmail string
-	NewEmail      string
-}
-
-func (e *EmailChangedEvent) EventName() string {
-	return "EmailChangedEvent"
-}
-
-// The below line ensures at compile time that EmailChangedEvent adheres to the ddd.Event interface
-var _ ddd.Event = (*EmailChangedEvent)(nil)
-```
-
-Next, let's implement the [User](https://github.com/vklap/go_ddd/blob/main/internal/domain/command_model/user.go) Entity:
 ```go
 package command_model
 
@@ -140,9 +79,8 @@ func (u *User) Email() string {
 }
 
 func (u *User) SetEmail(value string) {
-	if u.email != "" && u.email != value {
-		// Record the EmailChangedEvent 
-		u.AddEvent(&EmailChangedEvent{UserID: u.ID(), NewEmail: value, OriginalEmail: u.email})
+	if value != "" && u.email != value {
+		u.AddEvent(&EmailSetEvent{UserID: u.ID(), NewEmail: value, OriginalEmail: u.email})
 	}
 	u.email = value
 }
@@ -151,15 +89,40 @@ func (u *User) SetEmail(value string) {
 var _ ddd.Entity = (*User)(nil)
 ```
 
-### Step 2: Adapters
+##### SaveUserCommand
 
-The `Adapters Layer` is responsible for communicating with external resources only, 
-and should not contain any business logic.
+```go
+package command_model
 
-- [Repository](https://github.com/vklap/go_ddd/blob/main/internal/adapters/repository.go)
-- [PubSubClient](https://github.com/vklap/go_ddd/blob/main/internal/adapters/pubsub_client.go)
+import "github.com/vklap/go_ddd/pkg/ddd"
 
-#### Repository
+// SaveUserCommand contains the data required to store a user's details.
+type SaveUserCommand struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+}
+
+func (c *SaveUserCommand) IsValid() error {
+	if c.UserID == "" {
+		return ddd.NewError("user ID cannot be empty", ddd.StatusCodeBadRequest)
+	}
+	if c.Email == "" {
+		return ddd.NewError("email cannot be empty", ddd.StatusCodeBadRequest)
+	}
+	return nil
+}
+
+func (c *SaveUserCommand) CommandName() string {
+	return "SaveUserCommand"
+}
+
+// The below line ensures at compile time that SaveUserCommand adheres to the ddd.Command interface
+var _ ddd.Command = (*SaveUserCommand)(nil)
+```
+
+##### Repository
+
+Please note that we're using a in memory repository for demo purposes (and also for the unit tests)
 
 ```go
 package adapters
@@ -229,144 +192,13 @@ func (r *InMemoryRepository) Rollback(ctx context.Context) error {
 var _ Repository = (*InMemoryRepository)(nil)
 ```
 
-#### EmailClient
-```go
-package adapters
+##### SaveUserCommandHandler
 
-import "log"
+This is the application layer flow that is triggered by the framework's unit of work - 
+in order to either commit or rollback the changes. 
 
-type EmailClient interface {
-	SendEmail(from, to string, title string, message string) error
-}
-
-// InMemoryEmailClient used for demo purposes
-type InMemoryEmailClient struct{}
-
-func (c *InMemoryEmailClient) SendEmail(from, to string, title string, message string) error {
-	log.Printf("Sent email from %q to %q with title %q and message: %q\n", from, to, title, message)
-	return nil
-}
-
-var _ EmailClient = (*InMemoryEmailClient)(nil)
-```
-
-#### PubSubClient
-```go
-package adapters
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/ddd"
-	"log"
-)
-
-type PubSubClient interface {
-	GetChangeEmailMessages(ctx context.Context) (chan []byte, error)
-	NotifyEmailChanged(ctx context.Context, userId string, newEmail string, oldEmail string) error
-	NotifySlack(ctx context.Context, message string) error
-	ddd.RollbackCommitter
-}
-
-// InMemoryPubSubClient is used for demo purposes.
-type InMemoryPubSubClient struct {
-	Commands                     []*command_model.ChangeEmailCommand
-	CommitCalled                 bool
-	CommitShouldFail             bool
-	MailSent                     bool
-	NotifyEmailChangedCalled     bool
-	NotifyEmailChangedFailed     bool
-	NotifyEmailChangedNewEmail   string
-	NotifyEmailChangedOldEmail   string
-	NotifyEmailChangedShouldFail bool
-	NotifyEmailChangedUserId     string
-	NotifySlackCalled            bool
-	NotifySlackMessage           string
-	RollbackCalled               bool
-	RollbackShouldFail           bool
-	SlackMessageSent             bool
-}
-
-func NewInMemoryPubSubClient() *InMemoryPubSubClient {
-	return &InMemoryPubSubClient{Commands: make([]*command_model.ChangeEmailCommand, 0)}
-}
-
-func (c *InMemoryPubSubClient) GetChangeEmailMessages(ctx context.Context) (chan []byte, error) {
-	messages := make(chan []byte)
-	go func() {
-		for _, command := range c.Commands {
-			data, err := json.Marshal(command)
-			if err != nil {
-				panic(err)
-			}
-			messages <- data
-		}
-		close(messages)
-	}()
-	return messages, nil
-}
-
-func (c *InMemoryPubSubClient) NotifyEmailChanged(ctx context.Context, userId string, newEmail, oldEmail string) error {
-	if c.NotifyEmailChangedFailed {
-		return errors.New("notify email changed failed")
-	}
-	c.NotifyEmailChangedCalled = true
-	if c.NotifyEmailChangedShouldFail {
-		return errors.New("notify email changed has failed")
-	}
-	c.NotifyEmailChangedNewEmail = newEmail
-	c.NotifyEmailChangedOldEmail = oldEmail
-	c.NotifyEmailChangedUserId = userId
-	log.Printf("requested to send EmailChanged notification: userID=%q, oldEmail=%q, newEmail=%q", userId, oldEmail, newEmail)
-	return nil
-}
-
-func (c *InMemoryPubSubClient) NotifySlack(ctx context.Context, message string) error {
-	c.NotifySlackCalled = true
-	c.NotifySlackMessage = message
-	log.Printf("requested to send Slack message: %q", message)
-	return nil
-}
-
-func (c *InMemoryPubSubClient) Commit(ctx context.Context) error {
-	c.CommitCalled = true
-	if c.CommitShouldFail {
-		return errors.New("commit failed")
-	}
-	if c.NotifyEmailChangedCalled {
-		c.MailSent = true
-	}
-	if c.NotifySlackCalled {
-		c.SlackMessageSent = true
-	}
-	return nil
-}
-
-func (c *InMemoryPubSubClient) Rollback(ctx context.Context) error {
-	c.RollbackCalled = true
-	if c.RollbackShouldFail {
-		return errors.New("rollback failed")
-	}
-	return nil
-}
-
-var _ PubSubClient = (*InMemoryPubSubClient)(nil)
-```
-
-### Step 3: The `Command` and `Event` Handlers
-
-The `Service Layer` is responsible for managing applicative flows and as such contains 
-references to both the `Domain Layer` and the `Adapters Layer`.
-
-In our use case, the `change email` main flow is handled by [ChangeEmailCommandHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/command_handlers/change_email_command_handler.go) -
-which registers events that will eventually be handled by event handlers (if they exist). 
-
-In the below implementation, the `change email` flow registers an `EmailChangedEvent`, that will be handled
-by [EmailChangedEventHandler](https://github.com/vklap/go_ddd/blob/main/internal/service_layer/event_handlers/email_changed_event_handler.go).
-
-#### ChangeEmailCommandHandler
+This handler is registered to the above defined `SaveUserCommand` - so that whenever this command is received, 
+then this handler will be executed. The registration is handled by the `Bootstrapper` which will be shown later.
 
 ```go
 package command_handlers
@@ -379,36 +211,36 @@ import (
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// ChangeEmailCommandHandler implements ddd.CommandHandler.
-type ChangeEmailCommandHandler struct {
+// SaveUserCommandHandler implements ddd.CommandHandler.
+type SaveUserCommandHandler struct {
 	repository adapters.Repository
 	events     []ddd.Event
 }
 
-// NewChangeEmailCommandHandler is a constructor function to be used by the Bootstrapper.
-func NewChangeEmailCommandHandler(repository adapters.Repository) *ChangeEmailCommandHandler {
-	return &ChangeEmailCommandHandler{repository: repository}
+// NewSaveUserCommandHandler is a constructor function to be used by the Bootstrapper.
+func NewSaveUserCommandHandler(repository adapters.Repository) *SaveUserCommandHandler {
+	return &SaveUserCommandHandler{repository: repository}
 }
 
 // Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
-func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
-	changeEmailCommand, ok := command.(*command_model.ChangeEmailCommand)
+func (h *SaveUserCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
+	saveUserCommand, ok := command.(*command_model.SaveUserCommand)
 	if ok == false {
-		return nil, fmt.Errorf("ChangeEmailCommandHandler expects a command of type %T", changeEmailCommand)
+		return nil, fmt.Errorf("SaveUserCommandHandler expects a command of type %T", saveUserCommand)
 	}
 
-	// No need to call changeEmailCommand.IsValid() - as it's being called by the framework.
+	// No need to call saveUserCommand.IsValid() - as it's being called by the framework.
 
 	// Delegate fetching data to the repository, which belongs to the Adapters Layer.
-	user, err := h.repository.GetUserById(ctx, changeEmailCommand.UserID)
+	user, err := h.repository.GetUserById(ctx, saveUserCommand.UserID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Delegate updating the email to the user, which is a Domain Entity.
-	// The SetEmail method is responsible to detect if the email was changed,
-	// and if so, then it will record an NotifySlackEvent.
-	user.SetEmail(changeEmailCommand.NewEmail)
+	// The SetEmail method is responsible to detect if a new email was set,
+	// and if so, then it will record an EmailSetEvent.
+	user.SetEmail(saveUserCommand.Email)
 
 	// Delegate storing data to the repository.
 	if err = h.repository.SaveUser(ctx, user); err != nil {
@@ -426,93 +258,29 @@ func (h *ChangeEmailCommandHandler) Handle(ctx context.Context, command ddd.Comm
 // Commit is responsible for committing the changes performed by the Handle method, such as
 // committing a database transaction managed by the repository.
 // This method is being called by the framework, so it should not be called from within the Handle method.
-func (h *ChangeEmailCommandHandler) Commit(ctx context.Context) error {
+func (h *SaveUserCommandHandler) Commit(ctx context.Context) error {
 	return h.repository.Commit(ctx)
 }
 
 // Rollback is responsible to rollback changes performed by the Handle method, such as
 // rollback a database transaction managed by the repository.
 // This method is being called by the framework, so it should not be called from within the Handle method.
-func (h *ChangeEmailCommandHandler) Rollback(ctx context.Context) error {
+func (h *SaveUserCommandHandler) Rollback(ctx context.Context) error {
 	return h.repository.Rollback(ctx)
 }
 
 // Events reports about events.
 // These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
 // This method is being called by the framework, so it should not be called from within the Handle method.
-func (h *ChangeEmailCommandHandler) Events() []ddd.Event {
+func (h *SaveUserCommandHandler) Events() []ddd.Event {
 	return h.events
 }
 
-var _ ddd.CommandHandler = (*ChangeEmailCommandHandler)(nil)
+var _ ddd.CommandHandler = (*SaveUserCommandHandler)(nil)
 ```
 
-#### EmailChangedEventHandler
-
-```go
-package event_handlers
-
-import (
-	"context"
-	"fmt"
-	"github.com/vklap/go_ddd/internal/adapters"
-	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/pkg/ddd"
-)
-
-// EmailChangedEventHandler implements ddd.EventHandler.
-type EmailChangedEventHandler struct {
-	pubSubClient adapters.PubSubClient
-	events       []ddd.Event
-}
-
-// NewEmailChangedEventHandler is a constructor function to be used by the Bootstrapper.
-func NewEmailChangedEventHandler(pubSubClient adapters.PubSubClient) *EmailChangedEventHandler {
-	return &EmailChangedEventHandler{pubSubClient: pubSubClient, events: make([]ddd.Event, 0)}
-}
-
-// Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
-func (h *EmailChangedEventHandler) Handle(ctx context.Context, event ddd.Event) error {
-	e, ok := event.(*command_model.EmailChangedEvent)
-	if ok == false {
-		panic(fmt.Sprintf("failed to handle email changed: want %T, got %T", &command_model.NotifySlackEvent{}, e))
-	}
-	if err := h.pubSubClient.NotifyEmailChanged(ctx, e.UserID, e.NewEmail, e.OriginalEmail); err != nil {
-		return err
-	}
-	h.events = append(h.events, &command_model.NotifySlackEvent{Message: "Email Notification sent for EmailChanged event"})
-	return nil
-}
-
-// Commit is responsible for committing the changes performed by the Handle method, such as
-// committing a database transaction managed by the repository.
-// This method is being called by the framework, so it should not be called from within the Handle method.
-func (h *EmailChangedEventHandler) Commit(ctx context.Context) error {
-	return h.pubSubClient.Commit(ctx)
-}
-
-// Rollback is responsible to rollback changes performed by the Handle method, such as
-// rollback a database transaction managed by the repository.
-// This method is being called by the framework, so it should not be called from within the Handle method.
-func (h *EmailChangedEventHandler) Rollback(ctx context.Context) error {
-	return h.pubSubClient.Rollback(ctx)
-}
-
-// Events reports about events.
-// These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
-// This method is being called by the framework, so it should not be called from within the Handle method.
-func (h *EmailChangedEventHandler) Events() []ddd.Event {
-	return h.events
-}
-
-var _ ddd.EventHandler = (*EmailChangedEventHandler)(nil)
-```
-
-### Step 4: The `Bootrapper`
-
-The [Bootstrapper](https://github.com/vklap/go_ddd/blob/main/internal/entrypoints/boostrapper/bootsrapper.go)
-registers the `command` and `event` handlers with their `adapter dependencies`. 
-Besides this, it acts as a facade for receiving commands. 
+##### Registration of the SaveUserCommand with its handler: SaveUserCommandHandler
+This happens within the bootstrapper, like so:
 
 ```go
 package boostrapper
@@ -522,7 +290,6 @@ import (
 	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
 	"github.com/vklap/go_ddd/internal/service_layer/command_handlers"
-	"github.com/vklap/go_ddd/internal/service_layer/event_handlers"
 	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
@@ -539,95 +306,218 @@ type DemoBootstrapper struct {
 	Bootstrapper *ddd.Bootstrapper
 }
 
+// New creates and initializes the bootstrapper.
+// Please notice that in a real world scenario you may not require such a custom "DemoBootstrapper",
+// and that the adapter instances should most probably be created within the register callbacks, like so:
+// 	bs.Bootstrapper.RegisterCommandHandlerFactory(&command_model.SaveUserCommand{}, func() (ddd.CommandHandler, error) {
+//		return command_handlers.NewSaveUserCommandHandler(adapters.NewInMemoryRepository()), nil
+//	})
 func New() *DemoBootstrapper {
 	bs := &DemoBootstrapper{
 		PubSubClient: adapters.NewInMemoryPubSubClient(),
 		Repository:   adapters.NewInMemoryRepository(),
 		Bootstrapper: ddd.NewBootstrapper(),
 	}
-	bs.Bootstrapper.RegisterCommandHandlerFactory(&command_model.ChangeEmailCommand{}, func() (ddd.CommandHandler, error) {
-		return command_handlers.NewChangeEmailCommandHandler(bs.Repository), nil
-	})
-	bs.Bootstrapper.RegisterEventHandlerFactory(&command_model.EmailChangedEvent{}, func() (ddd.EventHandler, error) {
-		return event_handlers.NewEmailChangedEventHandler(bs.PubSubClient), nil
-	})
-	bs.Bootstrapper.RegisterEventHandlerFactory(&command_model.NotifySlackEvent{}, func() (ddd.EventHandler, error) {
-		return event_handlers.NewNotifySlackEventHandler(bs.PubSubClient), nil
+	bs.Bootstrapper.RegisterCommandHandlerFactory(&command_model.SaveUserCommand{}, func() (ddd.CommandHandler, error) {
+		return command_handlers.NewSaveUserCommandHandler(bs.Repository), nil
 	})
 	return bs
 }
+```
 
-// HandleCommand encapsulates the Bootstrapper HandleCommand, and gives a strongly typed interface
-// provided by go's generics.
-func HandleCommand[Command ddd.Command](ctx context.Context, command Command) (any, error) {
-	return Instance.Bootstrapper.HandleCommand(ctx, command)
+##### Handling the SaveUserCommand by the framework
+
+Based on the above created bootstrapper singleton Instance variable, 
+this is how the command should be propagated into the framework: 
+```go
+var command command_model.SaveUserCommand
+...
+bootstrapper.Instance.HandleCommand(context.Background(), &command)
+```
+
+### But wait, isn't this code over-engineered?
+
+Basically, if this all the code should do, then this code is arguably too complex.
+Yet, what happens when you need to handle other tasks as a result of the above flow, such as:
+1. Trigger a verification email to validate the provided email?
+2. Notify a KPI Service about the changes - for further analysis
+3. Handle other changes, as in a real world scenario, the user entity should have much more properties - 
+   where each property change might require triggering other actions (a.k.a. events)
+
+The code might quickly look like this:
+```go
+func (h *SaveUserCommandHandler) Handle(ctx context.Context, command ddd.Command) (any, error) {
+	saveUserCommand, ok := command.(*command_model.SaveUserCommand)
+	if ok == false {
+		return nil, fmt.Errorf("SaveUserCommandHandler expects a command of type %T", saveUserCommand)
+	}
+
+	user, err := h.repository.GetUserById(ctx, saveUserCommand.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	user.SetEmail(saveUserCommand.Email)
+    if err = h.repository.SaveUser(ctx, user); err != nil {
+        return nil, err
+    }
+	
+	// Side effects...
+    if user.EmailChanged() {
+	    if err := h.PubSub.requestEmailVerification(user); err != nil {
+		    ...	
+        }   
+        if err := h.PubSub.requestEmailVerification(user); err != nil {
+		    ...	
+        }       
+    }
+
+    // Side effects...
+	user.SetPhoneNumber(...)	
+	if user.PhoneChanged() {
+		if err := h.PubSub.requestPhoneVerification(user); err != nil {
+            ...
+		}
+		if err := h.PubSub.requestPhoneVerification(user); err != nil {
+            ...
+		}       
+	}
+	
+	...
+	
+	return nil, nil
 }
 ```
 
-### Step 5: The Entry Point
-The [worker](https://github.com/vklap/go_ddd/blob/main/internal/entrypoints/worker/worker.go)
-starts listening for notifications from a fake message broker with requests to change the user's email.
+The above code will contain lots side effects, and will defeat the SRP (Single Responsibility Principle) 
+for which it was created - which is to save the new user details.
+Even worse, it will sooner than later become spaghetti code - that will be a nightmare to maintain and unit test. 
 
+### Event-Driven Architecture with EventHandlers to the Rescue
+All the above side effects should best be extracted out of the above code, 
+and handled within other handlers by the framework. 
+These handlers will be handled in the same way as the command handler, 
+i.e. within units of work of their own - and may trigger other events which will be handled by the framework.
+
+However, please note that these events will be triggered by the framework - 
+and **not** by calling the bootstrapper's `HandleCommand` method.
+
+Here are 2 sample event handlers:
+
+#### EmailSetEventHandler that will trigger a KPIEvent that will be handled by the KPIEventHandler
 ```go
-package worker
+package event_handlers
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
+	"github.com/vklap/go_ddd/internal/adapters"
 	"github.com/vklap/go_ddd/internal/domain/command_model"
-	"github.com/vklap/go_ddd/internal/entrypoints/boostrapper"
-	"log"
+	"github.com/vklap/go_ddd/pkg/ddd"
 )
 
-// Start listens to the message broker and dispatches commands to be handled.
-func Start() {
-	// Setup InMemory fake data
-	bs := boostrapper.Instance
-	user := &command_model.User{}
-	user.SetEmail("kamel.amin@thaabet.sy")
-	user.SetID("1")
-	bs.Repository.UsersById[user.ID()] = user
-
-	fakePubSubMessage := &command_model.ChangeEmailCommand{
-		NewEmail: "eli.cohen@mossad.gov.il",
-		UserID:   "1",
-	}
-	bs.PubSubClient.Commands = append(bs.PubSubClient.Commands, fakePubSubMessage)
-
-	// Start listening for messages from fake in memory PubSub
-	messages, err := bs.PubSubClient.GetChangeEmailMessages(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	for message := range messages {
-		var command command_model.ChangeEmailCommand
-		err = json.Unmarshal(message, &command)
-		if err != nil {
-			log.Printf("failed to unmarshal ChangeEmailCommand: %v (message: %v)", err, message)
-			continue
-		}
-		_, err = boostrapper.HandleCommand[*command_model.ChangeEmailCommand](context.Background(), &command)
-		if err != nil {
-			log.Printf("handle ChangeEmailCommand failed: %v", err)
-		}
-	}
+// EmailSetEventHandler implements ddd.EventHandler.
+type EmailSetEventHandler struct {
+	pubSubClient adapters.PubSubClient
+	events       []ddd.Event
 }
+
+// NewEmailSetEventHandler is a constructor function to be used by the Bootstrapper.
+func NewEmailSetEventHandler(pubSubClient adapters.PubSubClient) *EmailSetEventHandler {
+	return &EmailSetEventHandler{pubSubClient: pubSubClient, events: make([]ddd.Event, 0)}
+}
+
+// Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
+func (h *EmailSetEventHandler) Handle(ctx context.Context, event ddd.Event) error {
+	e, ok := event.(*command_model.EmailSetEvent)
+	if ok == false {
+		panic(fmt.Sprintf("failed to handle email set: want %T, got %T", &command_model.EmailSetEvent{}, e))
+	}
+	if err := h.pubSubClient.NotifyEmailChanged(ctx, e.UserID, e.NewEmail, e.OriginalEmail); err != nil {
+		return err
+	}
+	h.events = append(h.events, &command_model.KPIEvent{Action: e.EventName(), Data: fmt.Sprintf("%v", e)})
+	return nil
+}
+
+// Commit is responsible for committing the changes performed by the Handle method, such as
+// committing a database transaction managed by the repository.
+// This method is being called by the framework, so it should not be called from within the Handle method.
+func (h *EmailSetEventHandler) Commit(ctx context.Context) error {
+	return h.pubSubClient.Commit(ctx)
+}
+
+// Rollback is responsible to rollback changes performed by the Handle method, such as
+// rollback a database transaction managed by the repository.
+// This method is being called by the framework, so it should not be called from within the Handle method.
+func (h *EmailSetEventHandler) Rollback(ctx context.Context) error {
+	return h.pubSubClient.Rollback(ctx)
+}
+
+// Events reports about events.
+// These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
+// This method is being called by the framework, so it should not be called from within the Handle method.
+func (h *EmailSetEventHandler) Events() []ddd.Event {
+	return h.events
+}
+
+var _ ddd.EventHandler = (*EmailSetEventHandler)(nil)
 ```
 
-### Step 6: The main function
-
-
-You can execute and eventually debug the code by running the following command:
-`go run ./cmd/worker/main.go`
-
+##### KPIEventHandler
 ```go
-package main
+package event_handlers
 
-import "github.com/vklap/go_ddd/internal/entrypoints/worker"
+import (
+	"context"
+	"fmt"
+	"github.com/vklap/go_ddd/internal/adapters"
+	"github.com/vklap/go_ddd/internal/domain/command_model"
+	"github.com/vklap/go_ddd/pkg/ddd"
+)
 
-func main() {
-	worker.Start()
+// KPIEventHandler implements ddd.EventHandler.
+type KPIEventHandler struct {
+	pubSubClient adapters.PubSubClient
 }
+
+// NewKPIEventHandler is a constructor function to be used by the Bootstrapper.
+func NewKPIEventHandler(pubSubClient adapters.PubSubClient) *KPIEventHandler {
+	return &KPIEventHandler{pubSubClient: pubSubClient}
+}
+
+// Handle manages the business logic flow, and is the glue between the Domain and the Adapters.
+func (h *KPIEventHandler) Handle(ctx context.Context, event ddd.Event) error {
+	e, ok := event.(*command_model.KPIEvent)
+	if ok == false {
+		panic(fmt.Sprintf("failed to handle KPI event: want %T, got %T", &command_model.KPIEvent{}, e))
+	}
+	return h.pubSubClient.NotifyKPIService(ctx, e)
+}
+
+// Commit is responsible for committing the changes performed by the Handle method, such as
+// committing a database transaction managed by the repository.
+// This method is being called by the framework, so it should not be called from within the Handle method.
+func (h *KPIEventHandler) Commit(ctx context.Context) error {
+	return h.pubSubClient.Commit(ctx)
+}
+
+// Rollback is responsible to rollback changes performed by the Handle method, such as
+// rollback a database transaction managed by the repository.
+// This method is being called by the framework, so it should not be called from within the Handle method.
+func (h *KPIEventHandler) Rollback(ctx context.Context) error {
+	return h.pubSubClient.Rollback(ctx)
+}
+
+// Events reports about events.
+// These events will be handled by the DDD framework if appropriate event handlers were registered by the bootstrapper.
+// This method is being called by the framework, so it should not be called from within the Handle method.
+func (h *KPIEventHandler) Events() []ddd.Event {
+	return nil
+}
+
+var _ ddd.EventHandler = (*KPIEventHandler)(nil)
+
 ```
 
 ## Links

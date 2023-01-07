@@ -32,7 +32,7 @@ func TestChangeEmail(t *testing.T) {
 	const newEmail = "eli.cohen@mossad.gov.il"
 
 	data := []struct {
-		command            *command_model.ChangeEmailCommand
+		command            *command_model.SaveUserCommand
 		commitCalled       bool
 		commitShouldFail   bool
 		errorMessage       string
@@ -44,7 +44,7 @@ func TestChangeEmail(t *testing.T) {
 		userExists         bool
 	}{
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			command:            &command_model.SaveUserCommand{Email: newEmail, UserID: userID},
 			commitCalled:       true,
 			commitShouldFail:   false,
 			errorMessage:       "",
@@ -56,7 +56,7 @@ func TestChangeEmail(t *testing.T) {
 			userExists:         true,
 		},
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: "i-do-not-exist"},
+			command:            &command_model.SaveUserCommand{Email: newEmail, UserID: "i-do-not-exist"},
 			commitCalled:       false,
 			commitShouldFail:   false,
 			errorMessage:       "",
@@ -68,7 +68,7 @@ func TestChangeEmail(t *testing.T) {
 			userExists:         false,
 		},
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: "", UserID: userID},
+			command:            &command_model.SaveUserCommand{Email: "", UserID: userID},
 			commitCalled:       false,
 			commitShouldFail:   false,
 			errorMessage:       "email cannot be empty",
@@ -80,7 +80,7 @@ func TestChangeEmail(t *testing.T) {
 			userExists:         true,
 		},
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: ""},
+			command:            &command_model.SaveUserCommand{Email: newEmail, UserID: ""},
 			commitCalled:       false,
 			commitShouldFail:   false,
 			errorMessage:       "user ID cannot be empty",
@@ -92,7 +92,7 @@ func TestChangeEmail(t *testing.T) {
 			userExists:         true,
 		},
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			command:            &command_model.SaveUserCommand{Email: newEmail, UserID: userID},
 			commitCalled:       false,
 			commitShouldFail:   false,
 			errorMessage:       "does not exist",
@@ -104,7 +104,7 @@ func TestChangeEmail(t *testing.T) {
 			userExists:         false,
 		},
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			command:            &command_model.SaveUserCommand{Email: newEmail, UserID: userID},
 			commitCalled:       false,
 			commitShouldFail:   false,
 			errorMessage:       "rollback failed",
@@ -116,7 +116,7 @@ func TestChangeEmail(t *testing.T) {
 			userExists:         false,
 		},
 		{
-			command:            &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID},
+			command:            &command_model.SaveUserCommand{Email: newEmail, UserID: userID},
 			commitCalled:       true,
 			commitShouldFail:   true,
 			errorMessage:       "commit failed",
@@ -168,7 +168,7 @@ func TestHandlerReceivedCommandOfWrongType(t *testing.T) {
 	fb := boostrapper.New()
 	command := &notSupportedCommand{}
 	fb.Bootstrapper.RegisterCommandHandlerFactory(command, func() (ddd.CommandHandler, error) {
-		return command_handlers.NewChangeEmailCommandHandler(fb.Repository), nil
+		return command_handlers.NewSaveUserCommandHandler(fb.Repository), nil
 	})
 
 	result, err := fb.Bootstrapper.HandleCommand(context.Background(), command)
@@ -179,7 +179,7 @@ func TestHandlerReceivedCommandOfWrongType(t *testing.T) {
 	if err == nil {
 		t.Error("want error not nil, got nil")
 	}
-	expectedCommand := &command_model.ChangeEmailCommand{}
+	expectedCommand := &command_model.SaveUserCommand{}
 	if strings.Contains(err.Error(), expectedCommand.CommandName()) != true {
 		t.Errorf("want error with %q, got %q", expectedCommand.CommandName(), err.Error())
 	}
@@ -230,7 +230,7 @@ func TestHandleEventFailure(t *testing.T) {
 			fb.PubSubClient.CommitShouldFail = d.commitFailed
 			fb.PubSubClient.RollbackCalled = d.rollbackCalled
 
-			command := &command_model.ChangeEmailCommand{NewEmail: newEmail, UserID: userID}
+			command := &command_model.SaveUserCommand{Email: newEmail, UserID: userID}
 
 			_, err := fb.Bootstrapper.HandleCommand(context.Background(), command)
 
@@ -262,16 +262,16 @@ func assertSuccess(t *testing.T, err error, result any, fb *boostrapper.DemoBoot
 	if fb.Repository.CommitCalled != true {
 		t.Errorf("want adapters.Repository commitCalled true, got %v", fb.Repository.CommitCalled)
 	}
-	if !fb.PubSubClient.NotifyEmailChangedCalled {
+	if !fb.PubSubClient.NotifyEmailSetCalled {
 		t.Error("want notify email changed to be called")
 	}
-	if !fb.PubSubClient.NotifySlackCalled {
+	if !fb.PubSubClient.NotifyKPICalled {
 		t.Error("want notify slack to be called")
 	}
 }
 
 func assertFailure(t *testing.T, err error, d struct {
-	command            *command_model.ChangeEmailCommand
+	command            *command_model.SaveUserCommand
 	commitCalled       bool
 	commitShouldFail   bool
 	errorMessage       string

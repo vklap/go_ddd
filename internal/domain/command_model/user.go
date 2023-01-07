@@ -14,9 +14,8 @@ func (u *User) Email() string {
 }
 
 func (u *User) SetEmail(value string) {
-	if u.email != "" && u.email != value {
-		// Record the NotifySlackEvent
-		u.AddEvent(&EmailChangedEvent{UserID: u.ID(), NewEmail: value, OriginalEmail: u.email})
+	if value != "" && u.email != value {
+		u.AddEvent(&EmailSetEvent{UserID: u.ID(), NewEmail: value, OriginalEmail: u.email})
 	}
 	u.email = value
 }

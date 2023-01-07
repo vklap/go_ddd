@@ -10,36 +10,36 @@ import (
 )
 
 type PubSubClient interface {
-	GetChangeEmailMessages(ctx context.Context) (chan []byte, error)
+	GetSaveUserMessages(ctx context.Context) (chan []byte, error)
 	NotifyEmailChanged(ctx context.Context, userId string, newEmail string, oldEmail string) error
-	NotifySlack(ctx context.Context, message string) error
+	NotifyKPIService(ctx context.Context, e *command_model.KPIEvent) error
 	ddd.RollbackCommitter
 }
 
 // InMemoryPubSubClient is used for demo purposes.
 type InMemoryPubSubClient struct {
-	Commands                     []*command_model.ChangeEmailCommand
-	CommitCalled                 bool
-	CommitShouldFail             bool
-	MailSent                     bool
-	NotifyEmailChangedCalled     bool
-	NotifyEmailChangedFailed     bool
-	NotifyEmailChangedNewEmail   string
-	NotifyEmailChangedOldEmail   string
-	NotifyEmailChangedShouldFail bool
-	NotifyEmailChangedUserId     string
-	NotifySlackCalled            bool
-	NotifySlackMessage           string
-	RollbackCalled               bool
-	RollbackShouldFail           bool
-	SlackMessageSent             bool
+	Commands                 []*command_model.SaveUserCommand
+	CommitCalled             bool
+	CommitShouldFail         bool
+	MailSent                 bool
+	NotifyEmailSetCalled     bool
+	NotifyEmailSetFailed     bool
+	NotifyEmailSetNewEmail   string
+	NotifyEmailSetOldEmail   string
+	NotifyEmailSetShouldFail bool
+	NotifyEmailSetUserId     string
+	NotifyKPICalled          bool
+	KPIEvent                 *command_model.KPIEvent
+	RollbackCalled           bool
+	RollbackShouldFail       bool
+	KPIEventSent             bool
 }
 
 func NewInMemoryPubSubClient() *InMemoryPubSubClient {
-	return &InMemoryPubSubClient{Commands: make([]*command_model.ChangeEmailCommand, 0)}
+	return &InMemoryPubSubClient{Commands: make([]*command_model.SaveUserCommand, 0)}
 }
 
-func (c *InMemoryPubSubClient) GetChangeEmailMessages(ctx context.Context) (chan []byte, error) {
+func (c *InMemoryPubSubClient) GetSaveUserMessages(ctx context.Context) (chan []byte, error) {
 	messages := make(chan []byte)
 	go func() {
 		for _, command := range c.Commands {
@@ -55,24 +55,24 @@ func (c *InMemoryPubSubClient) GetChangeEmailMessages(ctx context.Context) (chan
 }
 
 func (c *InMemoryPubSubClient) NotifyEmailChanged(ctx context.Context, userId string, newEmail, oldEmail string) error {
-	if c.NotifyEmailChangedFailed {
+	if c.NotifyEmailSetFailed {
 		return errors.New("notify email changed failed")
 	}
-	c.NotifyEmailChangedCalled = true
-	if c.NotifyEmailChangedShouldFail {
+	c.NotifyEmailSetCalled = true
+	if c.NotifyEmailSetShouldFail {
 		return errors.New("notify email changed has failed")
 	}
-	c.NotifyEmailChangedNewEmail = newEmail
-	c.NotifyEmailChangedOldEmail = oldEmail
-	c.NotifyEmailChangedUserId = userId
+	c.NotifyEmailSetNewEmail = newEmail
+	c.NotifyEmailSetOldEmail = oldEmail
+	c.NotifyEmailSetUserId = userId
 	log.Printf("requested to send EmailChanged notification: userID=%q, oldEmail=%q, newEmail=%q", userId, oldEmail, newEmail)
 	return nil
 }
 
-func (c *InMemoryPubSubClient) NotifySlack(ctx context.Context, message string) error {
-	c.NotifySlackCalled = true
-	c.NotifySlackMessage = message
-	log.Printf("requested to send Slack message: %q", message)
+func (c *InMemoryPubSubClient) NotifyKPIService(ctx context.Context, e *command_model.KPIEvent) error {
+	c.NotifyKPICalled = true
+	c.KPIEvent = e
+	log.Printf("notfiied KPI service: %v", e)
 	return nil
 }
 
@@ -81,11 +81,11 @@ func (c *InMemoryPubSubClient) Commit(ctx context.Context) error {
 	if c.CommitShouldFail {
 		return errors.New("commit failed")
 	}
-	if c.NotifyEmailChangedCalled {
+	if c.NotifyEmailSetCalled {
 		c.MailSent = true
 	}
-	if c.NotifySlackCalled {
-		c.SlackMessageSent = true
+	if c.NotifyKPICalled {
+		c.KPIEventSent = true
 	}
 	return nil
 }

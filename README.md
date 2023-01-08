@@ -531,7 +531,7 @@ var _ ddd.EventHandler = (*KPIEventHandler)(nil)
 - This separation of concerns make this kind of code very suitable for unit & integration tests - 
   the service & domain layers can be fully unit tested and the adapter layer can easily 
   be integration tested (without being concerned with any business logic leaking from the other layers - 
-  so that the integration tests can be kept simple)
+  so that the integration tests can remain simple)
   
 - A common code base structure makes it much easier for other developers, 
   who are aware of this structure, to get into the code.

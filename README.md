@@ -522,6 +522,20 @@ var _ ddd.EventHandler = (*KPIEventHandler)(nil)
 
 ```
 
+### Advantages of applying the above mentioned Domain-Driven Design Tactical Patterns
+
+- A clear separation of concerns between the business rules (which reside solely inside the domain layer), 
+  the application flows (which reside in the service layer) and the IO related operations - 
+  such as communication with databases/web services/file system (which reside in the adapters layer)
+
+- This separation of concerns make this kind of code very suitable for unit & integration tests - 
+  the service & domain layers can be fully unit tested and the adapter layer can easily 
+  be integration tested (without being concerned with any business logic leaking from the other layers - 
+  so that the integration tests can be kept simple)
+  
+- A common code base structure makes it much easier for other developers, 
+  who are aware of this structure, to get into the code.
+
 ## Links
 
 - [pkg.go.dev](https://pkg.go.dev/github.com/vklap/go_ddd)
